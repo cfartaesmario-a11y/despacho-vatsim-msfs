@@ -218,8 +218,14 @@
         <div class="card"><div class="card-h"><span>Piloto y cuentas</span></div><div class="pad">
           <div class="field"><label>Tu nombre</label><input id="cfg-pilotName"></div>
           <div class="field"><label>Usuario de SimBrief</label><input id="cfg-simbriefUser" placeholder="usuario o ID de piloto de Navigraph"></div>
-          <div class="field"><label>Clave API DeepSeek</label><input id="cfg-deepseekKey" type="password"></div>
+        </div></div>
+        <div class="card"><div class="card-h"><span>Inteligencia artificial</span></div><div class="pad">
+          <div class="field"><label>IA principal</label><select id="cfg-aiProvider"><option value="gemini">Google Gemini</option><option value="deepseek">DeepSeek</option></select></div>
+          <div class="field"><label>Clave API Gemini</label><input id="cfg-geminiKey" type="password" placeholder="aistudio.google.com/apikey"></div>
+          <div class="field"><label>Modelo Gemini</label><input id="cfg-geminiModel" placeholder="gemini-3.5-flash"></div>
+          <div class="field"><label>Clave API DeepSeek (reserva)</label><input id="cfg-deepseekKey" type="password"></div>
           <div class="field"><label>Modelo DeepSeek</label><input id="cfg-deepseekModel"></div>
+          <p class="muted small">Si la IA principal falla, se usa la otra automáticamente.</p>
         </div></div>
         <div class="card"><div class="card-h"><span>Firebase (historial en la nube)</span></div><div class="pad">
           <div class="field"><label>Project ID</label><input id="cfg-firebaseProjectId" placeholder="mi-despacho-vatsim"></div>
