@@ -26,7 +26,7 @@
     <button class="launch" id="btnLaunch"><i data-icon="play"></i>Iniciar sesión de vuelo</button>
     <div class="side-foot">
       <div><span class="dot" id="netDot"></span><span id="netTxt">Conectando…</span></div>
-      <div class="muted">v2.0 · <span id="storageTxt">local</span></div>
+      <div class="muted">v3.0 · <span id="storageTxt">local</span></div>
     </div>
   </aside>
 
@@ -213,7 +213,7 @@
 
     <!-- ============ AJUSTES -->
     <section class="view" id="view-settings">
-      <div class="step-head"><div><h2>Ajustes</h2><p>Se guardan en config.json en tu PC (nunca se suben a GitHub).</p></div></div>
+      <div class="step-head"><div><h2>Ajustes</h2><p id="cfgWhere">Se guardan en config.json en tu PC (nunca se suben a GitHub).</p></div></div>
       <div class="settings">
         <div class="card"><div class="card-h"><span>Piloto y cuentas</span></div><div class="pad">
           <div class="field"><label>Tu nombre</label><input id="cfg-pilotName"></div>
@@ -230,9 +230,9 @@
         <div class="card"><div class="card-h"><span>Firebase (historial en la nube)</span></div><div class="pad">
           <div class="field"><label>Project ID</label><input id="cfg-firebaseProjectId" placeholder="mi-despacho-vatsim"></div>
           <div class="field"><label>Web API Key</label><input id="cfg-firebaseApiKey" type="password" placeholder="AIza…"></div>
-          <p class="muted small">Si está vacío, el historial se guarda en data/flights.json.</p>
+          <p class="muted small">Si está vacío, el historial se guarda en este equipo.</p>
         </div></div>
-        <div class="card"><div class="card-h"><span>Sistema</span></div><div class="pad">
+        <div class="card local-only"><div class="card-h"><span>Sistema</span></div><div class="pad">
           <div class="field"><label>Script de inicio (.bat)</label><input id="cfg-batPath"></div>
           <div class="field"><label>Acceso directo de Volanta</label><input id="cfg-volantaPath"></div>
           <div class="field"><label>Carpeta de cartas</label><input id="cfg-chartsDir"></div>
@@ -245,6 +245,8 @@
 </div>
 <div id="toast"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="core.js"></script>
+<script src="web-api.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

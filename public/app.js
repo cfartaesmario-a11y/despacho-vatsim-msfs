@@ -5,6 +5,7 @@ const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 async function api(url, body) {
+  if (window.WEB_MODE) return webApi(url, body); // web publicada: responde el motor dentro del navegador
   const r = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined);
   const j = await r.json();
   if (!r.ok) throw new Error(j.error || r.statusText);
@@ -17,8 +18,8 @@ function toast(msg, err) {
 const zt = iso => iso ? new Date(iso).toISOString().slice(11, 16) : '--:--';
 const hm = min => `${Math.floor(min / 60)}h ${String(Math.round(min % 60)).padStart(2, '0')}m`;
 const fmtDate = iso => new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
-const logoUrl = iata => `/api/logo/${encodeURIComponent(iata)}`;
-const logoImg = (a, cls = '') => a?.iata ? `<img class="al-logo ${cls}" onload="prepLogo(this)" src="${logoUrl(a.iata)}" alt="${esc(a.name)}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'fb',textContent:'${esc(a.icao || a.iata)}'}))">` : `<span class="fb">${esc(a?.icao || '')}</span>`;
+const logoUrl = iata => window.WEB_MODE ? `https://pics.avs.io/800/320/${encodeURIComponent(iata)}.png` : `/api/logo/${encodeURIComponent(iata)}`;
+const logoImg = (a, cls = '') => a?.iata ? `<img class="al-logo ${cls}" crossorigin="anonymous" onload="prepLogo(this)" src="${logoUrl(a.iata)}" alt="${esc(a.name)}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'fb',textContent:'${esc(a.icao || a.iata)}'}))">` : `<span class="fb">${esc(a?.icao || '')}</span>`;
 
 // Logos PNG transparentes: recorta el margen vacío y, si el logo es oscuro (azul marino, negro…),
 // lo pasa a blanco para que se lea sobre el fondo oscuro. Resultado cacheado por aerolínea.
@@ -182,7 +183,7 @@ function drawVatsim(m) {
 window.setField = (id, icao) => { $('#' + id).value = icao; maps.wiz.map.closePopup(); toast(`${icao} como ${id === 'origin' ? 'origen' : 'destino'}`); };
 $('#showPilots').onchange = e => e.target.checked ? maps.atc.layers.pilots.addTo(maps.atc.map) : maps.atc.map.removeLayer(maps.atc.layers.pilots);
 
-fetch('/api/boundaries').then(r => r.json()).then(g => { state.boundaries = g; Object.values(maps).forEach(drawVatsim); });
+fetch('data/bounds.json').then(r => r.json()).then(g => { state.boundaries = g; Object.values(maps).forEach(drawVatsim); });
 async function loadVatsim() {
   try {
     state.vatsim = await api('/api/vatsim');
@@ -510,7 +511,7 @@ async function saveFlight() {
       type: a.code, typeName: `${a.maker} ${a.name}`, dep: d.depTime, block: o?.blockMin || r.block, fl: d.cruiseFl,
       origRwy: d.origRwy, destRwy: d.destRwy, altn: d.altn, route: o?.route || '', reg: o?.reg || '', status: 'planificado',
     });
-    wiz.saved = f.storage === 'firebase' ? 'Firebase' : 'local (data/flights.json)';
+    wiz.saved = f.storage === 'firebase' ? 'Firebase' : f.storage === 'navegador' ? 'este navegador' : 'local (data/flights.json)';
     await loadFlights(); renderTimeline();
   } catch (e) { toast('No se pudo guardar: ' + e.message, true); }
 }
@@ -573,7 +574,7 @@ function renderHome() {
 $('#btnNew').onclick = () => { showView('wizard'); goStep(1); };
 
 function renderHistory() {
-  $('#histSub').textContent = `${state.flights.length} vuelos · guardados en ${state.config.storage === 'firebase' ? 'Firebase' : 'este PC (data/flights.json)'}`;
+  $('#histSub').textContent = `${state.flights.length} vuelos · guardados en ${state.config.storage === 'firebase' ? 'Firebase' : state.config.mode === 'web' ? 'este navegador' : 'este PC (data/flights.json)'}`;
   $('#histTbl').innerHTML = !state.flights.length ? '<tr><td class="empty-row">Sin vuelos todavía.</td></tr>' :
     `<tr><th>Vuelo</th><th>Ruta</th><th>Fecha</th><th>Avión</th><th>Bloque</th><th>Pistas</th><th>Nivel</th></tr>` + state.flights.map(f => `<tr>
       <td><div class="fl"><span class="lg">${f.iata ? `<img src="${logoUrl(f.iata)}" alt="">` : ''}</span>${esc(f.callsign)}</div></td>
@@ -615,7 +616,11 @@ function applyConfig(c) {
   CFG.forEach(k => { const el = $('#cfg-' + k); if (el) el.value = c[k] ?? ''; });
   const n = c.pilotName || 'Piloto';
   $('#userName').textContent = n; $('#avatar').textContent = n.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  $('#storageTxt').textContent = c.storage === 'firebase' ? 'Firebase' : 'local';
+  $('#storageTxt').textContent = c.storage === 'firebase' ? 'Firebase' : c.mode === 'web' ? 'navegador' : 'local';
+  if (c.mode === 'web') {
+    document.body.classList.add('web-mode');
+    $('#cfgWhere').textContent = 'Versión web: tus ajustes y claves se guardan solo en este navegador (nunca en GitHub). Para abrir el .bat y Volanta usa la versión de tu PC.';
+  }
 }
 $('#btnSaveCfg').onclick = async () => {
   applyConfig(await api('/api/config', Object.fromEntries(CFG.map(k => [k, $('#cfg-' + k).value]))));
