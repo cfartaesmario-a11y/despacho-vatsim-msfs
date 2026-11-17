@@ -590,8 +590,13 @@ Responde SOLO JSON: {"fltnum":"número","cruiseFl":número (ej 360),"ci":número
 
   // ------------------------------------------------------------------ SimBrief
   Core.getSimbrief = async function (user) {
-    const j = await getJSON(`https://www.simbrief.com/api/xml.fetcher.php?username=${encodeURIComponent(user)}&json=1`);
-    if (j.fetch?.status !== 'Success') throw new Error('SimBrief: ' + (j.fetch?.status || 'sin respuesta'));
+    const u = String(user).trim();
+    const txt = await env.getText(`https://www.simbrief.com/api/xml.fetcher.php?${/^\d+$/.test(u) ? 'userid' : 'username'}=${encodeURIComponent(u)}&json=1`);
+    let j; try { j = JSON.parse(txt); } catch { throw new Error('SimBrief no responde, reintenta en un momento'); }
+    const status = j.fetch?.status || '';
+    if (/Unknown UserID|Unknown User/i.test(status)) throw new Error(`Usuario de SimBrief «${u}» no encontrado: revisa el Username o Pilot ID en simbrief.com → Account Settings`);
+    if (/No flight plan/i.test(status)) return { generated: null };
+    if (status !== 'Success') throw new Error('SimBrief: ' + (status || 'sin respuesta'));
     const fixes = j.navlog?.fix ? [].concat(j.navlog.fix) : [];
     return {
       generated: j.params?.time_generated ? new Date(+j.params.time_generated * 1000).toISOString() : null,
