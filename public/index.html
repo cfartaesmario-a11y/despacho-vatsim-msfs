@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Despacho VATSIM</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <!-- ============ barra lateral -->
+  <aside class="side">
+    <div class="logo">
+      <svg viewBox="0 0 120 60" aria-hidden="true"><path d="M8 50 L112 6 L70 30 L84 50 L62 36 L40 52 L50 34 Z" fill="currentColor" opacity=".9"/></svg>
+    </div>
+    <nav id="nav">
+      <a data-view="home" class="active"><i data-icon="home"></i>Inicio</a>
+      <a data-view="wizard"><i data-icon="plane"></i>Nuevo vuelo</a>
+      <a data-view="atc"><i data-icon="radar"></i>ATC en vivo</a>
+      <a data-view="history"><i data-icon="list"></i>Historial</a>
+      <a data-view="settings"><i data-icon="gear"></i>Ajustes</a>
+    </nav>
+    <button class="launch" id="btnLaunch"><i data-icon="play"></i>Iniciar sesión de vuelo</button>
+    <div class="side-foot">
+      <div><span class="dot" id="netDot"></span><span id="netTxt">Conectando…</span></div>
+      <div class="muted">v2.0 · <span id="storageTxt">local</span></div>
+    </div>
+  </aside>
+
+  <!-- ============ contenido -->
+  <div class="main">
+    <header class="top">
+      <div class="search ac">
+        <i data-icon="search"></i>
+        <input id="globalSearch" placeholder="Buscar aeropuerto para empezar un vuelo…" autocomplete="off">
+        <div class="suggest" id="sug-globalSearch"></div>
+      </div>
+      <div class="top-right">
+        <div class="utc"><span id="clock">--:--</span><small>UTC</small></div>
+        <button class="icon-btn" id="btnVolanta" title="Abrir Volanta"><i data-icon="globe"></i></button>
+        <div class="sep"></div>
+        <div class="user"><span class="avatar" id="avatar">PV</span><span id="userName">Piloto</span></div>
+      </div>
+    </header>
+
+    <!-- ============ INICIO -->
+    <section class="view active" id="view-home">
+      <div class="hero-row">
+        <div class="welcome">
+          <h1>Bienvenido<span id="welcomeName"></span>.</h1>
+          <p>¿Listo para tu próximo vuelo?</p>
+        </div>
+        <div class="kpis">
+          <div class="kpi"><i data-icon="plane"></i><div><b id="kFlights">0</b><span>Vuelos totales</span></div><svg class="spark" id="spark1" viewBox="0 0 80 32"></svg></div>
+          <div class="kpi"><i data-icon="clock"></i><div><b id="kHours">0 h</b><span>Horas de bloque</span></div><svg class="spark" id="spark2" viewBox="0 0 80 32"></svg></div>
+          <div class="kpi"><i data-icon="radar"></i><div><b id="kAtc">—</b><span>ATC en línea</span></div><svg class="spark" id="spark3" viewBox="0 0 80 32"></svg></div>
+        </div>
+      </div>
+      <div class="grid-home">
+        <div class="card next" id="nextCard">
+          <div class="next-bg" id="nextBg"></div>
+          <div class="next-in">
+            <div class="card-h"><span><i data-icon="plane"></i>Próximo vuelo</span><span class="pill" id="nextWhen">Sin planificar</span></div>
+            <div class="route-big" id="nextRoute">
+              <div><b>----</b><span>Origen</span></div><div class="arrow"><i data-icon="plane"></i></div><div><b>----</b><span>Destino</span></div>
+            </div>
+            <div class="next-meta" id="nextMeta"></div>
+            <button class="btn primary" id="btnNew"><i data-icon="play"></i>Planificar nuevo vuelo</button>
+          </div>
+          <div class="credit" id="nextCredit"></div>
+        </div>
+        <div class="card mapcard">
+          <div class="card-h"><span><i data-icon="pin"></i>Mapa en vivo</span><span class="pill" id="liveCount">VATSIM</span></div>
+          <div class="minimap" id="mapHome"></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><span><i data-icon="list"></i>Últimos vuelos</span><a class="link" data-goto="history">Ver todo →</a></div>
+          <table class="tbl" id="recentTbl"></table>
+        </div>
+        <div class="card fleetcard" id="fleetCard">
+          <div class="card-h"><span><i data-icon="hangar"></i>Avión favorito</span><a class="link" data-goto="wizard">Nuevo vuelo →</a></div>
+          <div class="fleet-img" id="fleetImg"></div>
+          <div class="fleet-name"><b id="fleetName">Airbus A320neo</b><span class="ok-pill">En servicio</span></div>
+          <div class="fleet-stats" id="fleetStats"></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><span><i data-icon="bars"></i>Tu actividad</span><span class="pill">Últimas 8 semanas</span></div>
+          <div class="bars" id="bars"></div>
+          <div class="fleet-stats" id="actStats"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ ASISTENTE NUEVO VUELO -->
+    <section class="view" id="view-wizard">
+      <ol class="stepper" id="stepper">
+        <li data-step="1"><span>1</span>Ruta</li>
+        <li data-step="2"><span>2</span>Avión</li>
+        <li data-step="3"><span>3</span>Aerolínea</li>
+        <li data-step="4"><span>4</span>Despacho</li>
+        <li data-step="5"><span>5</span>Envío</li>
+      </ol>
+
+      <!-- paso 1 -->
+      <div class="step" id="step-1">
+        <div class="map-stage">
+          <div id="mapWizard" class="fullmap"></div>
+          <div class="glass panel-left">
+            <div class="row2">
+              <div class="field ac"><label>Origen</label><input id="origin" placeholder="Automático" autocomplete="off"><div class="suggest" id="sug-origin"></div></div>
+              <button class="swap" id="swap" title="Intercambiar">⇄</button>
+              <div class="field ac"><label>Destino</label><input id="dest" placeholder="Automático" autocomplete="off"><div class="suggest" id="sug-dest"></div></div>
+            </div>
+            <div class="seg" id="durChips">
+              <button data-min="0" data-max="60">&lt;1h</button>
+              <button data-min="45" data-max="120" class="on">1–2h</button>
+              <button data-min="100" data-max="240">2–4h</button>
+              <button data-min="220" data-max="900">4h+</button>
+            </div>
+            <div class="row2">
+              <div class="field"><label>Región</label>
+                <select id="region">
+                  <option value="">Global</option><option value="E,L" selected>Europa</option><option value="LE,LP,GC,LX">España y Portugal</option>
+                  <option value="EG,EI">Reino Unido e Irlanda</option><option value="ED,ET,LO,LS,EH,EB,EL">Europa central</option>
+                  <option value="EK,EN,ES,EF,BI">Nórdicos</option><option value="LF,LI,LM">Francia e Italia</option><option value="K,C,MM">Norteamérica</option>
+                </select></div>
+              <div class="field"><label>Mín–máx (min)</label><div class="minmax"><input type="number" id="minMin" value="45" step="5"><input type="number" id="maxMin" value="120" step="5"></div></div>
+            </div>
+            <label class="chk"><input type="checkbox" id="onlyAtc" checked><span>Con ATC en línea</span></label>
+            <textarea id="preference" rows="2" placeholder="Pide algo a la IA: viento cruzado, montañas, APP abierto…"></textarea>
+            <div class="row2">
+              <button class="btn primary" id="btnAi"><i data-icon="spark"></i>Propuesta IA</button>
+              <button class="btn" id="btnSearch">Buscar</button>
+            </div>
+            <div id="aiBox" class="ai-note hidden"></div>
+            <div id="results" class="results"></div>
+          </div>
+          <div class="legend glass">
+            <span><b class="b DEL">D</b>DEL</span><span><b class="b GND">G</b>GND</span><span><b class="b TWR">T</b>TWR</span><span><b class="b APP">A</b>APP</span><span><b class="b ATIS">I</b>ATIS</span><span><i class="fir"></i>CTR</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- paso 2 -->
+      <div class="step" id="step-2">
+        <div class="step-head"><div><h2>Elige el avión</h2><p id="s2sub"></p></div></div>
+        <div id="aircraftGrid"></div>
+      </div>
+
+      <!-- paso 3 -->
+      <div class="step" id="step-3">
+        <div class="step-head"><div><h2>Elige la aerolínea</h2><p id="s3sub"></p></div></div>
+        <div class="airline-grid" id="airlineGrid"></div>
+      </div>
+
+      <!-- paso 4 -->
+      <div class="step" id="step-4">
+        <div class="dispatch">
+          <div class="disp-hero card" id="dispHero"></div>
+          <div class="disp-form card">
+            <div class="card-h"><span><i data-icon="doc"></i>Despacho</span><button class="btn sm primary" id="btnAiFill"><i data-icon="spark"></i>Autocompletar con IA</button></div>
+            <div class="form-grid" id="dispForm"></div>
+            <div class="briefing" id="briefing"></div>
+          </div>
+          <div class="card" id="wxDep"></div>
+          <div class="card" id="wxArr"></div>
+        </div>
+      </div>
+
+      <!-- paso 5 -->
+      <div class="step" id="step-5">
+        <div class="send">
+          <div class="card send-hero" id="sendHero"></div>
+          <div class="card">
+            <div class="card-h"><span><i data-icon="check"></i>Envío del plan</span></div>
+            <ol class="timeline" id="timeline"></ol>
+          </div>
+          <div class="card" id="ofpCard"><div class="card-h"><span><i data-icon="doc"></i>OFP SimBrief</span></div><div class="muted pad">Esperando a que generes el plan en SimBrief…</div></div>
+        </div>
+      </div>
+
+      <footer class="wiz-foot">
+        <div class="wiz-sum" id="wizSum"></div>
+        <div class="wiz-btns">
+          <button class="btn" id="btnBack">← Atrás</button>
+          <button class="btn primary" id="btnNext" disabled>Siguiente →</button>
+        </div>
+      </footer>
+    </section>
+
+    <!-- ============ ATC -->
+    <section class="view" id="view-atc">
+      <div class="atc-layout">
+        <div class="card atc-list">
+          <input id="atcFilter" placeholder="Filtrar: LEMD, EGTT, APP…">
+          <div id="events"></div>
+          <div id="atcList"></div>
+        </div>
+        <div class="card atc-map"><div id="mapAtc" class="fullmap"></div>
+          <div class="maptools glass"><label><input type="checkbox" id="showPilots"> Tráfico</label></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ HISTORIAL -->
+    <section class="view" id="view-history">
+      <div class="step-head"><div><h2>Historial de vuelos</h2><p id="histSub"></p></div></div>
+      <div class="card"><table class="tbl big" id="histTbl"></table></div>
+    </section>
+
+    <!-- ============ AJUSTES -->
+    <section class="view" id="view-settings">
+      <div class="step-head"><div><h2>Ajustes</h2><p>Se guardan en config.json en tu PC (nunca se suben a GitHub).</p></div></div>
+      <div class="settings">
+        <div class="card"><div class="card-h"><span>Piloto y cuentas</span></div><div class="pad">
+          <div class="field"><label>Tu nombre</label><input id="cfg-pilotName"></div>
+          <div class="field"><label>Usuario de SimBrief</label><input id="cfg-simbriefUser" placeholder="usuario o ID de piloto de Navigraph"></div>
+          <div class="field"><label>Clave API DeepSeek</label><input id="cfg-deepseekKey" type="password"></div>
+          <div class="field"><label>Modelo DeepSeek</label><input id="cfg-deepseekModel"></div>
+        </div></div>
+        <div class="card"><div class="card-h"><span>Firebase (historial en la nube)</span></div><div class="pad">
+          <div class="field"><label>Project ID</label><input id="cfg-firebaseProjectId" placeholder="mi-despacho-vatsim"></div>
+          <div class="field"><label>Web API Key</label><input id="cfg-firebaseApiKey" type="password" placeholder="AIza…"></div>
+          <p class="muted small">Si está vacío, el historial se guarda en data/flights.json.</p>
+        </div></div>
+        <div class="card"><div class="card-h"><span>Sistema</span></div><div class="pad">
+          <div class="field"><label>Script de inicio (.bat)</label><input id="cfg-batPath"></div>
+          <div class="field"><label>Acceso directo de Volanta</label><input id="cfg-volantaPath"></div>
+          <div class="field"><label>Carpeta de cartas</label><input id="cfg-chartsDir"></div>
+          <div class="field"><label>Minutos hasta el despegue</label><input id="cfg-prepMin" type="number" step="5"></div>
+        </div></div>
+      </div>
+      <div class="save-row"><button class="btn primary" id="btnSaveCfg">Guardar ajustes</button><span id="cfgSaved" class="muted"></span></div>
+    </section>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

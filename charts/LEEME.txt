@@ -1,0 +1,3 @@
+Pon aqui las cartas, una carpeta por aeropuerto:
+  charts\LEMD\LEMD_SID_RWY14.pdf
+  charts\LPPT\...

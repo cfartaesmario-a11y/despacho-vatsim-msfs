@@ -1,0 +1,7 @@
+# Configuración personal con claves (DeepSeek, Firebase): nunca se sube
+config.json
+# Historial local de vuelos
+data/flights.json
+node_modules/
+.claude/
+*.log
