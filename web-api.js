@@ -54,6 +54,8 @@
     if (p === '/api/events') return Core.getEvents();
     if (p === '/api/metar') return Core.getMetar(q('ids').split(','));
     if (p === '/api/airports') return Core.searchAirports(q('q'));
+    if (p === '/api/commercial') return Core.commercialAirports();
+    if (p.startsWith('/api/airportinfo/')) return Core.airportInfo(p.split('/').pop());
     if (p.startsWith('/api/airport/')) { const a = Core.airport(p.split('/').pop()); if (!a) throw new Error('Aeropuerto desconocido'); return { ...a, charts: [] }; }
     if (p.startsWith('/api/runways/')) return Core.runwayInfo(p.split('/').pop());
     if (p === '/api/search') return Core.findCandidates(body || {});

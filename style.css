@@ -436,3 +436,29 @@ body.web-mode .local-only { display: none !important; }
 .sb-user .row2 { align-items: center; max-width: 420px; }
 .sb-user .row2 .btn { flex: none; }
 .sb-user small { display: block; margin-top: 5px; font-size: 11.5px; }
+
+/* ===== mapa: aeropuertos comerciales y ficha al pasar el ratón */
+.aplbl { transform: translate(7px, -50%); font: 600 10px Inter, sans-serif; color: #cfd2f5; text-shadow: 0 0 3px #000, 0 0 4px #000; white-space: nowrap; pointer-events: none; letter-spacing: .3px; }
+.aplbl.big { font-size: 11px; color: #fff; }
+[data-z="none"] .aplbl, [data-z="big"] .aplbl:not(.big) { display: none; }
+.apcard-pop .leaflet-popup-content-wrapper { background: rgba(16,20,42,.86); backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%); border: 1px solid rgba(255,255,255,.14); border-radius: 18px; box-shadow: 0 20px 50px rgba(0,0,0,.55); }
+.apcard-pop .leaflet-popup-tip { background: rgba(16,20,42,.9); }
+.apcard-pop .leaflet-popup-content { margin: 14px 16px; min-width: 290px; }
+.apcard .h { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.apcard .h b { font-size: 20px; font-weight: 750; letter-spacing: .5px; }
+.apcard .h span { margin-left: 8px; font-size: 12px; font-weight: 700; color: var(--accent2); background: var(--accent-soft); padding: 2px 7px; border-radius: 6px; }
+.apcard .h small { color: var(--muted); font-size: 12px; text-align: right; }
+.apcard .nm { color: var(--dim); font-size: 13px; margin: 2px 0 10px; }
+.apcard .st { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 4px; }
+.apcard .st div { background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 10px; padding: 6px 7px; font-size: 10.5px; color: var(--muted); }
+.apcard .st b { display: block; color: var(--text); font-size: 13.5px; font-weight: 650; }
+.apcard .sec { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 600; margin: 10px 0 5px; }
+.apcard .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.apcard .chips span { font-size: 12px; background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 7px; padding: 2px 7px; }
+.apcard .chips i { font-style: normal; color: var(--muted); font-size: 11px; }
+.apcard .als { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; min-height: 24px; font-size: 12px; font-weight: 700; color: var(--dim); }
+.apcard .als img { height: 18px; max-width: 64px; object-fit: contain; }
+.apcard .btns { display: flex; gap: 8px; margin-top: 12px; }
+.apcard .btns .btn { padding: 8px; font-size: 12.5px; }
+.apcard-float { position: absolute; left: 0; top: 0; z-index: 800; width: 320px; padding: 12px 14px; border-radius: 18px; background: rgba(14,17,36,.96); opacity: 0; pointer-events: none; transition: opacity .15s; }
+.apcard-float.on { opacity: 1; pointer-events: auto; }

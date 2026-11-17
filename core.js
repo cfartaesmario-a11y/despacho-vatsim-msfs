@@ -90,6 +90,39 @@
     }
     return hits.sort((x, y) => x[0] - y[0]).slice(0, 10).map(h => pub(h[1]));
   };
+  // Aeropuertos con vuelos comerciales regulares (según las rutas reales), para pintarlos en el mapa:
+  // [icao, iata, nombre, ciudad, país, lat, lon, nº de destinos]
+  Core.commercialAirports = function (minRoutes = 3) {
+    const out = [];
+    for (const [icao, m] of routesFrom) {
+      const a = airports.get(icao);
+      if (!a || m.size < minRoutes || isNaN(a.lat)) continue;
+      out.push([icao, a.iata || '', a.name || '', a.city || '', a.country || '', a.lat, a.lon, m.size]);
+    }
+    return out.sort((x, y) => y[7] - x[7]);
+  };
+  // Ficha del aeropuerto: pistas, destinos, aerolíneas que más operan y destinos principales
+  Core.airportInfo = function (icao) {
+    const a = airports.get(String(icao).toUpperCase()); if (!a) return null;
+    const rw = runways.get(a.icao) || [];
+    const pairs = new Map();
+    // une cada cabecera con su recíproca (14L ↔ 32R): misma pista física
+    for (const r of rw) {
+      const n = +r.id.slice(0, 2), s = r.id[2] || '';
+      const k = n <= 18 ? n + s : (n - 18) + ({ L: 'R', R: 'L' }[s] || s);
+      if (!pairs.has(k)) pairs.set(k, { ids: [], len: r.len });
+      pairs.get(k).ids.push(r.id);
+    }
+    const runwayList = [...pairs.values()].map(p => ({ name: p.ids.sort((a, b) => parseInt(a) - parseInt(b)).join('/'), ft: p.len, m: Math.round(p.len * 0.3048) })).sort((x, y) => y.ft - x.ft);
+    const from = routesFrom.get(a.icao) || new Map();
+    const carriers = new Map();
+    for (const info of from.values()) for (const c of info.carriers) carriers.set(c, (carriers.get(c) || 0) + 1);
+    const airlineName = iata => fleetByIata.get(iata)?.[0]?.name || ofAirlines[iata]?.[1] || iata;
+    const topAirlines = [...carriers.entries()].sort((x, y) => y[1] - x[1]).slice(0, 6).map(([iata, n]) => ({ iata, name: airlineName(iata), routes: n }));
+    const topDest = [...from.entries()].map(([d, info]) => ({ icao: d, city: airports.get(d)?.city || d, airlines: info.carriers.length, min: info.min }))
+      .sort((x, y) => y.airlines - x.airlines).slice(0, 8);
+    return { ...pub(a), continent: a.continent, routes: from.size, runways: runwayList, topAirlines, topDest };
+  };
   Core.airport = icao => { const a = airports.get(String(icao).toUpperCase()); return a ? { ...pub(a), routes: routesFrom.get(a.icao)?.size || 0 } : null; };
 
   // ------------------------------------------------------------------ VATSIM
