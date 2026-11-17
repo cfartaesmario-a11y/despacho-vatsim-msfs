@@ -244,7 +244,7 @@ drawCommercial().catch(() => {});
 window.setField = (id, icao) => { $('#' + id).value = icao; maps.wiz.map.closePopup(); cardEl.classList.remove('on'); toast(`${icao} como ${id === 'origin' ? 'origen' : 'destino'}`); };
 $('#showPilots').onchange = e => e.target.checked ? maps.atc.layers.pilots.addTo(maps.atc.map) : maps.atc.map.removeLayer(maps.atc.layers.pilots);
 
-fetch('data/bounds.json').then(r => r.json()).then(g => { state.boundaries = g; Object.values(maps).forEach(drawVatsim); });
+fetch('data/bounds.json?v=' + window.APP_V).then(r => r.json()).then(g => { state.boundaries = g; Object.values(maps).forEach(drawVatsim); });
 async function loadVatsim() {
   try {
     state.vatsim = await api('/api/vatsim');
