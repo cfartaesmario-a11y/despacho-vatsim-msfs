@@ -459,34 +459,68 @@ function renderSendStep() {
 function renderTimeline() {
   const hasUser = !!state.config.simbriefUser, o = wiz.ofp;
   const st = i => (o && i <= 2) || (wiz.saved && i === 4) ? 'done' : (!o && i === 1 && !wiz.sentAt) || (!o && i === 2 && wiz.sentAt) || (o && i === 3) ? 'now' : '';
+  const play = icon('play').replace('<svg', '<svg width="14" height="14"');
   $('#timeline').innerHTML = `
-    <li class="${st(1)}"><div class="n">1</div><div class="c"><b>Enviar a SimBrief</b><span>Se abre SimBrief con todo relleno: indicativo, pistas, nivel, alternativo, pax y hora. Inicia sesión con tu cuenta de Navigraph si te lo pide.</span><br>
-      ${hasUser ? '' : '<span class="bad">Añade tu usuario de SimBrief en Ajustes para importar el plan automáticamente.</span><br>'}
-      <a class="btn primary" id="btnSB" target="_blank" href="${simbriefUrl()}">${icon('play').replace('<svg', '<svg width="14" height="14"')} Abrir SimBrief</a></div></li>
-    <li class="${st(2)}"><div class="n">2</div><div class="c"><b>Generar el OFP</b><span>${o ? `OFP recibido · ${esc(o.callsign)} generado a las ${zt(o.generated)}Z` : wiz.sentAt ? '<span class="spin"></span>Pulsa «Generate Flight» en SimBrief. Lo detecto automáticamente…' : 'Pendiente'}</span></div></li>
-    <li class="${st(3)}"><div class="n">3</div><div class="c"><b>Presentar el plan en VATSIM</b><span>Los controladores verán tu plan en cuanto lo envíes. Inicia sesión con tu cuenta de VATSIM y pulsa «File Flight Plan».</span>
+    <li class="${st(1)}"><div class="n">1</div><div class="c"><b>Enviar a SimBrief</b><span>Se abre SimBrief en otra pestaña con todo relleno. Inicia sesión con tu cuenta de Navigraph si te lo pide y pulsa «Generate Flight».</span>
+      <div class="sb-user"><label>Tu usuario de SimBrief</label><div class="row2"><input id="sbUser" placeholder="usuario o nº de piloto" value="${esc(state.config.simbriefUser || '')}"><button class="btn sm" id="sbUserSave">Guardar</button></div>
+      <small class="muted">Lo ves en simbrief.com → Account Settings (Username o Pilot ID). Sin él no puedo detectar tu plan.</small></div>
+      <button class="btn primary" id="btnSB" ${hasUser ? '' : 'disabled'}>${play} Abrir SimBrief</button></div></li>
+    <li class="${st(2)}"><div class="n">2</div><div class="c"><b>Generar el OFP</b><span id="sbStatus">${o ? `OFP recibido · ${esc(o.callsign)} generado a las ${zt(o.generated)}Z` : wiz.sentAt ? '<span class="spin"></span>Esperando a que pulses «Generate Flight». Al detectarlo cierro SimBrief y vuelves aquí.' : 'Pendiente'}</span>
+      ${!o && wiz.sentAt ? '<br><button class="btn sm" id="sbCheck">Ya lo he generado · comprobar</button>' : ''}</div></li>
+    <li class="${st(3)}"><div class="n">3</div><div class="c"><b>Presentar el plan en VATSIM</b><span>Inicia sesión con tu cuenta de VATSIM (tu CID) y pulsa «File Flight Plan». Los controladores lo verán al conectarte con vPilot con el mismo indicativo.</span>
       ${o?.prefileVatsim ? `<br><a class="btn primary" target="_blank" href="${esc(o.prefileVatsim)}">Presentar en VATSIM</a>` : ''}</div></li>
     <li class="${st(4)}"><div class="n">4</div><div class="c"><b>Guardado en el historial</b><span>${wiz.saved ? `Guardado en ${esc(wiz.saved)}` : o ? 'Guardando…' : 'Se guarda al recibir el OFP'}</span>${!o && !wiz.saved ? '<br><button class="btn sm" id="btnSaveNoOfp">Guardar sin OFP</button>' : ''}</div></li>
-    <li><div class="n">5</div><div class="c"><b>Iniciar sesión de vuelo</b><span>Abre MSFS 2024, vPilot, Volanta y el resto de programas con tu .bat.</span><br><button class="btn" id="btnLaunch2">${icon('play').replace('<svg', '<svg width="14" height="14"')} Ejecutar iniciar_vuelo.bat</button></div></li>`;
-  $('#btnSB').onclick = () => { wiz.sentAt = Date.now(); renderTimeline(); startPolling(); };
+    <li class="local-only"><div class="n">5</div><div class="c"><b>Iniciar sesión de vuelo</b><span>Abre MSFS 2024, vPilot, Volanta y el resto de programas con tu .bat.</span><br><button class="btn" id="btnLaunch2">${play} Ejecutar iniciar_vuelo.bat</button></div></li>`;
+  $('#sbUserSave').onclick = async () => {
+    const v = $('#sbUser').value.trim(); if (!v) return toast('Escribe tu usuario de SimBrief', true);
+    applyConfig(await api('/api/config', { simbriefUser: v }));
+    toast('Usuario de SimBrief guardado'); renderTimeline(); if (wiz.sentAt && !wiz.ofp) startPolling(true);
+  };
+  $('#sbUser').onkeydown = e => { if (e.key === 'Enter') $('#sbUserSave').click(); };
+  $('#btnSB').onclick = () => {
+    // la pestaña la abre la web: así puede cerrarla sola cuando llegue el OFP
+    sbWin = window.open(simbriefUrl(), 'simbrief');
+    if (!sbWin) return toast('El navegador bloqueó la ventana emergente: permítela para esta web', true);
+    wiz.sentAt = Date.now(); renderTimeline(); startPolling();
+  };
+  const ck = $('#sbCheck'); if (ck) ck.onclick = () => startPolling(true);
   $('#btnLaunch2').onclick = () => launch('bat');
   const sv = $('#btnSaveNoOfp'); if (sv) sv.onclick = () => saveFlight();
   renderOfp();
 }
-function startPolling() {
-  stopPolling();
-  if (!state.config.simbriefUser) return;
-  const tick = async () => {
-    try {
-      const o = await api('/api/simbrief');
-      if (o.generated && Date.parse(o.generated) >= wiz.sentAt - 120e3 && o.origin === wiz.route.origin.icao && o.dest === wiz.route.dest.icao) {
-        wiz.ofp = o; stopPolling(); toast('OFP recibido de SimBrief'); renderTimeline(); saveFlight(); return;
-      }
-    } catch {}
-    if (Date.now() - wiz.sentAt < 20 * 60e3) pollTimer = setTimeout(tick, 6000);
-  };
-  pollTimer = setTimeout(tick, 5000);
+let sbWin = null;
+// Busca el último OFP de tu cuenta cada 5 s y en cuanto vuelves a esta pestaña.
+// Vale cualquier OFP de esta misma ruta generado desde 30 min antes de abrir SimBrief.
+async function checkOfp(manual) {
+  if (!wiz.route || wiz.ofp) return true;
+  try {
+    const o = await api('/api/simbrief');
+    const fresh = o.generated && Date.parse(o.generated) >= wiz.sentAt - 30 * 60e3;
+    if (fresh && o.origin === wiz.route.origin.icao && o.dest === wiz.route.dest.icao) {
+      wiz.ofp = o; stopPolling();
+      try { if (sbWin && !sbWin.closed) sbWin.close(); } catch {}
+      window.focus(); showView('wizard'); if (wiz.step !== 5) goStep(5);
+      toast(`OFP ${o.callsign || ''} recibido de SimBrief · cerrado SimBrief`);
+      renderTimeline(); saveFlight(); return true;
+    }
+    if (manual) toast(o.generated ? `Tu último plan en SimBrief es ${o.origin}→${o.dest} (${zt(o.generated)}Z), no ${wiz.route.origin.icao}→${wiz.route.dest.icao}. Pulsa «Generate Flight».` : 'SimBrief aún no tiene ningún plan generado.', true);
+  } catch (e) { if (manual) toast(e.message, true); }
+  return false;
 }
+function startPolling(manualNow) {
+  stopPolling();
+  if (!state.config.simbriefUser) { if (manualNow) toast('Primero guarda tu usuario de SimBrief', true); return; }
+  if (!wiz.sentAt) wiz.sentAt = Date.now();
+  const tick = async () => {
+    if (await checkOfp(false)) return;
+    if (Date.now() - wiz.sentAt < 30 * 60e3) pollTimer = setTimeout(tick, 5000);
+  };
+  if (manualNow) checkOfp(true).then(done => { if (!done) pollTimer = setTimeout(tick, 5000); });
+  else pollTimer = setTimeout(tick, 4000);
+}
+// al volver a esta pestaña desde SimBrief, comprobar al momento
+document.addEventListener('visibilitychange', () => { if (!document.hidden && wiz.sentAt && !wiz.ofp && state.config.simbriefUser) checkOfp(false); });
+window.addEventListener('focus', () => { if (wiz.sentAt && !wiz.ofp && state.config.simbriefUser) checkOfp(false); });
 function renderOfp() {
   const o = wiz.ofp, el = $('#ofpCard');
   if (!o) { el.innerHTML = `<div class="card-h"><span>${icon('doc').replace('<svg', '<svg width="18" height="18"')} OFP SimBrief</span></div><div class="muted pad">Esperando a que generes el plan en SimBrief…</div>`; return; }
