@@ -7,8 +7,8 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<meta name="app-version" content="202611171222">
-<link rel="stylesheet" href="style.css?v=202611171222">
+<meta name="app-version" content="202611171229">
+<link rel="stylesheet" href="style.css?v=202611171229">
 </head>
 <body>
 <div class="app">
@@ -16,18 +16,19 @@
   <aside class="side">
     <div class="logo">
       <svg viewBox="0 0 120 60" aria-hidden="true"><path d="M8 50 L112 6 L70 30 L84 50 L62 36 L40 52 L50 34 Z" fill="currentColor" opacity=".9"/></svg>
+      <div class="brand">Despacho<br>VATSIM</div>
     </div>
     <nav id="nav">
       <a data-view="home" class="active"><i data-icon="home"></i>Inicio</a>
-      <a data-view="wizard"><i data-icon="plane"></i>Nuevo vuelo</a>
+      <a data-view="wizard"><i data-icon="plus"></i>Nuevo vuelo</a>
       <a data-view="atc"><i data-icon="radar"></i>ATC en vivo</a>
       <a data-view="history"><i data-icon="list"></i>Historial</a>
       <a data-view="settings"><i data-icon="gear"></i>Ajustes</a>
     </nav>
     <button class="launch" id="btnLaunch"><i data-icon="play"></i>Iniciar sesión de vuelo</button>
     <div class="side-foot">
-      <div><span class="dot" id="netDot"></span><span id="netTxt">Conectando…</span></div>
-      <div class="muted">v3.0 · <span id="storageTxt">local</span></div>
+      <div class="net-card"><div><span class="dot" id="netDot"></span><b id="netState">VATSIM</b></div><span id="netTxt">Conectando…</span></div>
+      <div class="muted ver">v3.1 · <span id="storageTxt">local</span></div>
     </div>
   </aside>
 
@@ -49,54 +50,63 @@
 
     <!-- ============ INICIO -->
     <section class="view active" id="view-home">
-      <div class="hero-row">
-        <div class="welcome">
-          <h1>Bienvenido<span id="welcomeName"></span>.</h1>
+      <div class="hero-banner" id="homeHero">
+        <div class="hero-photo" id="homeHeroImg"></div>
+        <div class="hero-txt">
+          <h1><span>Bienvenido de nuevo,</span><b id="welcomeName">piloto.</b></h1>
           <p>¿Listo para tu próximo vuelo?</p>
-        </div>
-        <div class="kpis">
-          <div class="kpi"><i data-icon="plane"></i><div><b id="kFlights">0</b><span>Vuelos totales</span></div><svg class="spark" id="spark1" viewBox="0 0 80 32"></svg></div>
-          <div class="kpi"><i data-icon="clock"></i><div><b id="kHours">0 h</b><span>Horas de bloque</span></div><svg class="spark" id="spark2" viewBox="0 0 80 32"></svg></div>
-          <div class="kpi"><i data-icon="radar"></i><div><b id="kAtc">—</b><span>ATC en línea</span></div><svg class="spark" id="spark3" viewBox="0 0 80 32"></svg></div>
+          <hr>
+          <button class="btn primary" id="btnNew"><i data-icon="plane"></i>Planificar nuevo vuelo<i data-icon="chev"></i></button>
         </div>
       </div>
-      <div class="grid-home">
+      <div class="grid-home2">
+        <div class="kpi"><i data-icon="plane"></i><div><b id="kFlights">0</b><span>Vuelos realizados</span></div><svg class="spark" id="spark1" viewBox="0 0 80 32"></svg></div>
+        <div class="kpi"><i data-icon="clock"></i><div><b id="kHours">0 h</b><span>Horas de bloque</span></div><svg class="spark" id="spark2" viewBox="0 0 80 32"></svg></div>
         <div class="card next" id="nextCard">
-          <div class="next-bg" id="nextBg"></div>
-          <div class="next-in">
-            <div class="card-h"><span><i data-icon="plane"></i>Próximo vuelo</span><span class="pill" id="nextWhen">Sin planificar</span></div>
+          <div class="card-h"><span><i data-icon="plane"></i>Próximo vuelo</span><span class="pill" id="nextWhen">Sin planificar</span></div>
+          <div class="next-row">
             <div class="route-big" id="nextRoute">
               <div><b>----</b><span>Origen</span></div><div class="arrow"><i data-icon="plane"></i></div><div><b>----</b><span>Destino</span></div>
             </div>
             <div class="next-meta" id="nextMeta"></div>
-            <button class="btn primary" id="btnNew"><i data-icon="play"></i>Planificar nuevo vuelo</button>
           </div>
-          <div class="credit" id="nextCredit"></div>
+          <a class="btn wide" data-goto="history">Ver detalles <i data-icon="arrow"></i></a>
         </div>
         <div class="card mapcard">
-          <div class="card-h"><span><i data-icon="pin"></i>Mapa en vivo</span><span class="pill" id="liveCount">VATSIM</span></div>
+          <div class="card-h"><span><i data-icon="globe"></i>ATC en vivo – VATSIM</span><span class="live"><span class="dot on"></span><span id="liveCount">En tiempo real</span></span></div>
           <div class="minimap" id="mapHome"></div>
         </div>
-        <div class="card">
-          <div class="card-h"><span><i data-icon="list"></i>Últimos vuelos</span><a class="link" data-goto="history">Ver todo →</a></div>
+        <div class="card create" id="fleetCard">
+          <div class="card-h"><span><i data-icon="list"></i>Crear un vuelo</span><a class="link" data-goto="wizard">Empezar <i data-icon="arrow"></i></a></div>
+          <ol class="mini-steps"><li class="on"><span>1</span>Ruta</li><li><span>2</span>Avión</li><li><span>3</span>Aerolínea</li><li><span>4</span>Despacho</li><li><span>5</span>Envío</li></ol>
+          <div class="create-row">
+            <div class="fleet-img" id="fleetImg"></div>
+            <div><b id="fleetName">Airbus A320neo</b><div class="muted" id="fleetRoute">Tu avión favorito</div><div class="fleet-stats" id="fleetStats"></div></div>
+          </div>
+          <span class="ok-pill hidden">En servicio</span>
+        </div>
+        <div class="card recent">
+          <div class="card-h"><span><i data-icon="list"></i>Últimos vuelos</span><a class="link" data-goto="history">Ver todos <i data-icon="arrow"></i></a></div>
           <table class="tbl" id="recentTbl"></table>
         </div>
-        <div class="card fleetcard" id="fleetCard">
-          <div class="card-h"><span><i data-icon="hangar"></i>Avión favorito</span><a class="link" data-goto="wizard">Nuevo vuelo →</a></div>
-          <div class="fleet-img" id="fleetImg"></div>
-          <div class="fleet-name"><b id="fleetName">Airbus A320neo</b><span class="ok-pill">En servicio</span></div>
-          <div class="fleet-stats" id="fleetStats"></div>
-        </div>
-        <div class="card">
+        <div class="card activity">
           <div class="card-h"><span><i data-icon="bars"></i>Tu actividad</span><span class="pill">Últimas 8 semanas</span></div>
-          <div class="bars" id="bars"></div>
-          <div class="fleet-stats" id="actStats"></div>
+          <div class="act-row"><div class="act-stats" id="actStats"></div><div class="bars" id="bars"></div></div>
         </div>
+        <span id="kAtc" class="hidden"></span><svg id="spark3" class="hidden"></svg>
       </div>
     </section>
 
     <!-- ============ ASISTENTE NUEVO VUELO -->
     <section class="view" id="view-wizard">
+      <div class="page-hero" id="wizHero">
+        <div class="hero-photo" id="wizHeroImg"></div>
+        <div class="hero-txt">
+          <a class="back" data-goto="home"><i data-icon="back"></i>Volver</a>
+          <h1><i data-icon="plane"></i>Nuevo vuelo</h1>
+          <p>Planifica y despacha tu próximo vuelo en VATSIM</p>
+        </div>
+      </div>
       <ol class="stepper" id="stepper">
         <li data-step="1"><span>1</span>Ruta</li>
         <li data-step="2"><span>2</span>Avión</li>
@@ -246,8 +256,8 @@
 </div>
 <div id="toast"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="core.js?v=202611171222"></script>
-<script src="web-api.js?v=202611171222"></script>
-<script src="app.js?v=202611171222"></script>
+<script src="core.js?v=202611171229"></script>
+<script src="web-api.js?v=202611171229"></script>
+<script src="app.js?v=202611171229"></script>
 </body>
 </html>

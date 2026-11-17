@@ -64,6 +64,10 @@ const ICONS = {
   spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
   doc: '<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M8 13h8M8 17h6"/>',
   check: '<path d="m5 12 5 5L20 7"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  chev: '<path d="m9 6 6 6-6 6"/>',
+  arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  back: '<path d="M19 12H5M11 6l-6 6 6 6"/>',
   cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
 };
 function icon(name) { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`; }
@@ -116,7 +120,7 @@ function showView(v) {
   $$('.view').forEach(s => s.classList.toggle('active', s.id === 'view-' + v));
   if (v === 'atc') setTimeout(() => maps.atc.map.invalidateSize(), 50);
   if (v === 'home') { setTimeout(() => maps.home.map.invalidateSize(), 50); renderHome(); }
-  if (v === 'wizard') setTimeout(() => maps.wiz.map.invalidateSize(), 50);
+  if (v === 'wizard') { setTimeout(() => maps.wiz.map.invalidateSize(), 50); if (!$('#wizHeroImg').classList.contains('loaded')) setPhoto($('#wizHeroImg'), { type: 'A388' }, 1); }
   if (v === 'history') renderHistory();
 }
 $$('#nav a').forEach(a => a.onclick = () => showView(a.dataset.view));
@@ -231,7 +235,7 @@ async function drawCommercial() {
   const dots = L.layerGroup(), labels = L.layerGroup();
   for (const [icao, iata, name, city, country, lat, lon, n] of list) {
     const big = n >= 120, mid = n >= 40;
-    const c = L.circleMarker([lat, lon], { radius: big ? 5 : mid ? 3.6 : 2.4, color: '#c9cbff', weight: big ? 1.4 : 1, opacity: .9, fillColor: big ? '#8487ff' : '#5b5ff0', fillOpacity: big ? .9 : .65 }).addTo(dots);
+    const c = L.circleMarker([lat, lon], { radius: big ? 5 : mid ? 3.6 : 2.4, color: '#ffffff', weight: big ? 1.4 : 1, opacity: big ? .9 : .5, fillColor: big ? '#f2f2f2' : '#9a9a9a', fillOpacity: big ? .95 : .7 }).addTo(dots);
     hoverCard(c, icao);
     if (n >= 25) L.marker([lat, lon], { icon: L.divIcon({ className: '', html: `<div class="aplbl ${big ? 'big' : ''}" data-n="${n}">${esc(iata || icao)}</div>`, iconSize: [0, 0] }), interactive: false }).addTo(labels);
   }
@@ -249,10 +253,10 @@ async function loadVatsim() {
   try {
     state.vatsim = await api('/api/vatsim');
     const c = state.vatsim.counts;
-    $('#netDot').className = 'dot on'; $('#netTxt').textContent = `VATSIM en línea · ${c.pilots} pilotos`;
+    $('#netDot').className = 'dot on'; $('#netState').textContent = 'VATSIM Online'; $('#netTxt').textContent = `Conectado · ${c.pilots} pilotos`;
     $('#kAtc').textContent = c.controllers; $('#liveCount').textContent = `${c.controllers} ATC · ${c.pilots} pilotos`;
     Object.values(maps).forEach(drawVatsim); renderAtcList();
-  } catch (e) { $('#netDot').className = 'dot off'; $('#netTxt').textContent = 'VATSIM sin conexión'; }
+  } catch (e) { $('#netDot').className = 'dot off'; $('#netState').textContent = 'VATSIM'; $('#netTxt').textContent = 'Sin conexión'; }
 }
 loadVatsim(); setInterval(loadVatsim, 30000);
 
@@ -356,15 +360,15 @@ function renderResults() {
       ${c.warnings.length ? `<div class="warn">${c.warnings.map(esc).join(' · ')}</div>` : ''}
     </div>`).join('');
   $$('#results .rcard').forEach(el => el.onclick = () => selectRoute(rs[+el.dataset.i]));
-  rs.slice(0, 40).forEach(c => L.polyline(greatCircle(c.origin, c.dest, 32), { color: c.pick ? '#8487ff' : '#9aa0c8', weight: c.pick ? 2.5 : 1, opacity: c.pick ? .95 : .3 }).on('click', () => selectRoute(c)).addTo(L_.routes));
+  rs.slice(0, 40).forEach(c => L.polyline(greatCircle(c.origin, c.dest, 32), { color: c.pick ? '#ffffff' : '#a8a8a8', weight: c.pick ? 2.5 : 1, opacity: c.pick ? .95 : .3 }).on('click', () => selectRoute(c)).addTo(L_.routes));
 }
 function selectRoute(c) {
   if (wiz.route?.origin.icao !== c.origin.icao || wiz.route?.dest.icao !== c.dest.icao) { wiz.aircraft = null; wiz.airline = null; wiz.disp = null; wiz.ofp = null; wiz.saved = false; }
   wiz.route = c;
   $$('#results .rcard').forEach(el => el.classList.toggle('sel', wiz.results[+el.dataset.i] === c));
   const L_ = maps.wiz.layers; L_.sel.clearLayers();
-  const line = L.polyline(greatCircle(c.origin, c.dest), { color: '#8487ff', weight: 3.5 }).addTo(L_.sel);
-  for (const a of [c.origin, c.dest]) L.circleMarker([a.lat, a.lon], { radius: 6, color: '#fff', weight: 2, fillColor: '#5b5ff0', fillOpacity: 1 }).addTo(L_.sel);
+  const line = L.polyline(greatCircle(c.origin, c.dest), { color: '#ffffff', weight: 2.5 }).addTo(L_.sel);
+  for (const a of [c.origin, c.dest]) L.circleMarker([a.lat, a.lon], { radius: 6, color: '#fff', weight: 2, fillColor: '#ffffff', fillOpacity: 1 }).addTo(L_.sel);
   maps.wiz.map.flyToBounds(line.getBounds(), { paddingTopLeft: [420, 60], paddingBottomRight: [60, 60], maxZoom: 7 });
   updateWizFoot();
 }
@@ -597,7 +601,7 @@ function renderOfp() {
       <span>Pax / ZFW / TOW</span><span>${esc(o.pax)} / ${esc(o.zfw)} / ${esc(o.tow)}</span>
       <span>Matrícula</span><span>${esc(o.reg || '—')}</span></div>
     <div class="route-str">${esc(o.route)}</div>`;
-  if (o.coords?.length > 1) { maps.wiz.layers.sel.clearLayers(); L.polyline(o.coords, { color: '#8487ff', weight: 3 }).addTo(maps.wiz.layers.sel); }
+  if (o.coords?.length > 1) { maps.wiz.layers.sel.clearLayers(); L.polyline(o.coords, { color: '#ffffff', weight: 2.5 }).addTo(maps.wiz.layers.sel); }
 }
 async function saveFlight() {
   if (wiz.saved) return;
@@ -625,7 +629,7 @@ function weekCounts(n = 8) {
 }
 function spark(svg, data) {
   const max = Math.max(...data, 1), pts = data.map((v, i) => `${(i / (data.length - 1)) * 78 + 1},${30 - (v / max) * 26}`).join(' ');
-  svg.innerHTML = `<polyline points="${pts}" fill="none" stroke="#8487ff" stroke-width="1.6" stroke-linejoin="round"/>`;
+  svg.innerHTML = `<polyline points="${pts}" fill="none" stroke="#d9d9d9" stroke-width="1.6" stroke-linejoin="round"/>`;
 }
 function recentRows(list) {
   if (!list.length) return '<tr><td class="empty-row" colspan="5">Aún no hay vuelos. Planifica el primero.</td></tr>';
@@ -635,7 +639,8 @@ function recentRows(list) {
 }
 function renderHome() {
   const fl = state.flights, name = state.config.pilotName;
-  $('#welcomeName').textContent = name ? ', ' + name.split(' ')[0] : '';
+  $('#welcomeName').textContent = (name ? name.split(' ')[0] : 'piloto') + '.';
+  if (!$('#homeHeroImg').classList.contains('loaded')) setPhoto($('#homeHeroImg'), { type: 'A359' }, 0);
   const hrs = fl.reduce((s, f) => s + (+f.block || 0), 0) / 60;
   $('#kFlights').textContent = fl.length; $('#kHours').textContent = hrs.toFixed(1) + ' h';
   const { w, h } = weekCounts();
@@ -648,14 +653,12 @@ function renderHome() {
   $('#actStats').innerHTML = `<div><b>${fl.length}</b><span>Vuelos</span></div><div><b>${hrs.toFixed(1)} h</b><span>Horas de bloque</span></div><div><b>${routes}</b><span>Rutas distintas</span></div>`;
   // próximo vuelo
   const nf = fl[0];
-  const nextBg = $('#nextBg');
   if (nf) {
     $('#nextRoute').innerHTML = `<div><b>${esc(nf.origin)}</b><span>${esc(nf.originCity || '')}</span></div><div class="arrow"><i data-icon="plane"></i></div><div><b>${esc(nf.dest)}</b><span>${esc(nf.destCity || '')}</span></div>`;
     $('#nextMeta').innerHTML = `<div><i data-icon="cal"></i><div><b>${fmtDate(nf.dep)}</b>${zt(nf.dep)}Z</div></div><div><i data-icon="plane"></i><div><b>${esc(nf.type)}</b>${esc(nf.callsign)}</div></div>`;
     const mins = Math.round((Date.parse(nf.dep) - Date.now()) / 60e3);
     $('#nextWhen').textContent = mins > 0 ? `En ${hm(mins)}` : 'Ya salió';
-    setPhoto(nextBg, [{ al: nf.airline, type: nf.type }, { type: nf.type }]);
-  } else setPhoto(nextBg, { type: 'A359' });
+  }
   applyIcons($('#nextCard'));
   // avión favorito
   const counts = {}; fl.forEach(f => counts[f.type] = (counts[f.type] || 0) + 1);
@@ -663,7 +666,8 @@ function renderHome() {
   const ac = state.aircraft.find(a => a.code === fav);
   if (ac) {
     $('#fleetName').textContent = `${ac.maker} ${ac.name}`;
-    setPhoto($('#fleetImg'), { type: ac.code });
+    $('#fleetRoute').innerHTML = nf ? `${esc(nf.origin)} → ${esc(nf.dest)} <span class="ok">· ${nf.route ? 'SimBrief OFP ✓' : 'planificado'}</span>` : 'Tu avión favorito';
+    if (!$('#fleetImg').classList.contains('loaded')) setPhoto($('#fleetImg'), { type: ac.code }, 3);
     const fh = fl.filter(f => f.type === fav).reduce((s, f) => s + (+f.block || 0), 0) / 60;
     $('#fleetStats').innerHTML = `<div><b>${counts[fav] || 0}</b><span>Vuelos</span></div><div><b>${ac.operators}</b><span>Aerolíneas</span></div><div><b>${fh.toFixed(1)} h</b><span>Horas</span></div>`;
   }
