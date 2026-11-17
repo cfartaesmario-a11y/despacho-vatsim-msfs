@@ -3,6 +3,7 @@
 // el mismo motor (core.js) dentro del navegador. Ajustes e historial se guardan en este
 // navegador (localStorage) o en tu Firebase si lo configuras. Nada se sube a GitHub.
 // =====================================================================
+window.APP_V = document.querySelector('meta[name=app-version]')?.content || 'dev';
 (function () {
   const local = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
   window.WEB_MODE = !local || new URLSearchParams(location.search).has('web');
@@ -26,9 +27,9 @@
   function init() {
     return ready ||= (async () => {
       const [core, bounds, pre] = await Promise.all([
-        fetch('data/core.json').then(r => r.json()),
-        fetch('data/bounds.json').then(r => r.json()),
-        fetch('data/photos.json').then(r => r.json()).catch(() => ({})),
+        fetch('data/core.json?v=' + window.APP_V).then(r => r.json()),
+        fetch('data/bounds.json?v=' + window.APP_V).then(r => r.json()),
+        fetch('data/photos.json?v=' + window.APP_V).then(r => r.json()).catch(() => ({})),
       ]);
       photos = { ...pre, ...photoLocal };
       Core.init(core, bounds, {
