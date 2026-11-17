@@ -72,9 +72,16 @@ window.APP_V = document.querySelector('meta[name=app-version]')?.content || 'dev
       if (!user) throw new Error('Añade tu usuario de SimBrief en Ajustes');
       return Core.getSimbrief(user);
     }
+    if (p.startsWith('/api/atc/')) return Core.atcAt(p.split('/').pop());
+    if (p === '/api/flights/delete') {
+      const id = body?.id;
+      if (Core.firebaseOn()) { await Core.firebaseDelete(id); return { ok: true }; }
+      LS.set('despacho.flights', LS.get('despacho.flights', []).filter(f => (f.id || f.created) !== id));
+      return { ok: true };
+    }
     if (p === '/api/flights') {
       if (body) {
-        const flight = { ...body, created: new Date().toISOString() };
+        const flight = { ...body, id: Core.newFlightId(), created: new Date().toISOString() };
         if (Core.firebaseOn()) { await Core.firebaseSave(flight); return { ...flight, storage: 'firebase' }; }
         const all = LS.get('despacho.flights', []); all.unshift(flight); LS.set('despacho.flights', all.slice(0, 500));
         return { ...flight, storage: 'navegador' };
