@@ -17,8 +17,34 @@ function toast(msg, err) {
 const zt = iso => iso ? new Date(iso).toISOString().slice(11, 16) : '--:--';
 const hm = min => `${Math.floor(min / 60)}h ${String(Math.round(min % 60)).padStart(2, '0')}m`;
 const fmtDate = iso => new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
-const logoUrl = iata => `https://pics.avs.io/480/160/${encodeURIComponent(iata)}.png`;
-const logoImg = (a, cls = '') => a?.iata ? `<img class="${cls}" src="${logoUrl(a.iata)}" alt="${esc(a.name)}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'fb',textContent:'${esc(a.icao || a.iata)}'}))">` : `<span class="fb">${esc(a?.icao || '')}</span>`;
+const logoUrl = iata => `/api/logo/${encodeURIComponent(iata)}`;
+const logoImg = (a, cls = '') => a?.iata ? `<img class="al-logo ${cls}" onload="prepLogo(this)" src="${logoUrl(a.iata)}" alt="${esc(a.name)}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'fb',textContent:'${esc(a.icao || a.iata)}'}))">` : `<span class="fb">${esc(a?.icao || '')}</span>`;
+
+// Logos PNG transparentes: recorta el margen vacío y, si el logo es oscuro (azul marino, negro…),
+// lo pasa a blanco para que se lea sobre el fondo oscuro. Resultado cacheado por aerolínea.
+const logoMem = new Map();
+window.prepLogo = img => {
+  if (img.dataset.done) return; img.dataset.done = 1;
+  const key = img.getAttribute('src');
+  const apply = r => { if (!r) return; img.src = r.src; img.classList.toggle('mono', r.dark); img.classList.add('ready'); };
+  if (logoMem.has(key)) return apply(logoMem.get(key));
+  try {
+    const w = img.naturalWidth, h = img.naturalHeight, c = document.createElement('canvas');
+    c.width = w; c.height = h; const x = c.getContext('2d'); x.drawImage(img, 0, 0);
+    const d = x.getImageData(0, 0, w, h).data;
+    let x0 = w, y0 = h, x1 = -1, y1 = -1, lum = 0, n = 0;
+    for (let y = 0; y < h; y++) for (let i = 0; i < w; i++) {
+      const k = (y * w + i) * 4, al = d[k + 3]; if (al < 24) continue;
+      if (i < x0) x0 = i; if (i > x1) x1 = i; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      lum += (0.2126 * d[k] + 0.7152 * d[k + 1] + 0.0722 * d[k + 2]) * al / 255; n += al / 255;
+    }
+    if (x1 < 0) return img.classList.add('ready');
+    const o = document.createElement('canvas'); o.width = x1 - x0 + 1; o.height = y1 - y0 + 1;
+    o.getContext('2d').drawImage(c, x0, y0, o.width, o.height, 0, 0, o.width, o.height);
+    const r = { src: o.toDataURL('image/png'), dark: n > 0 && lum / n < 105 };
+    logoMem.set(key, r); apply(r);
+  } catch { img.classList.add('ready'); }
+};
 
 // ---------------------------------------------------------------- iconos
 const ICONS = {
@@ -45,24 +71,25 @@ applyIcons();
 
 // ---------------------------------------------------------------- fotos (Wikimedia Commons)
 const photoMem = new Map();
+// q: texto · {q, must} · {type} (librea del fabricante) · {al, type} (avión de esa aerolínea, nunca de otra)
 async function photosFor(q) {
-  const { q: text, must = '' } = typeof q === 'string' ? { q } : q;
-  const key = text + '|' + must;
-  if (!photoMem.has(key)) photoMem.set(key, api(`/api/photos?q=${encodeURIComponent(text)}&must=${encodeURIComponent(must)}`).catch(() => []));
-  return photoMem.get(key);
+  const o = typeof q === 'string' ? { q } : q;
+  const url = o.al ? `/api/photo/airline?al=${encodeURIComponent(o.al)}&type=${encodeURIComponent(o.type)}`
+    : o.type ? `/api/photo/type?type=${encodeURIComponent(o.type)}`
+    : `/api/photos?q=${encodeURIComponent(o.q)}&must=${encodeURIComponent(o.must || '')}`;
+  if (!photoMem.has(url)) photoMem.set(url, api(url).catch(() => []));
+  return photoMem.get(url);
 }
 // palabra distintiva del nombre de la aerolínea (para exigirla en el título de la foto)
 const keyWord = name => (name.split(/\s+/).filter(w => !/^(air|airlines|airways|lines|international|de|del)$/i.test(w)).sort((a, b) => b.length - a.length)[0] || name);
-const airlinePhotoQueries = (al, a) => {
-  const must = keyWord(al.name);
-  return [{ q: `${al.name} ${a.maker} ${a.name}`, must }, { q: `${al.name} ${a.name.replace(/neo|ceo/i, '')}`, must }, { q: `${al.name} ${a.maker}`, must }, { q: `${al.name} landing`, must }, a.photo];
-};
+const airlinePhotoQueries = (al, a) => [{ al: al.icao, type: a.code }];
 async function setPhoto(el, queries, idx = 0) {
   for (const q of [].concat(queries)) {
     const list = await photosFor(q);
     const p = list[idx % Math.max(list.length, 1)];
     if (p) {
-      el.style.backgroundImage = `url("${p.url}")`;
+      await new Promise(ok => { const im = new Image(); im.onload = im.onerror = ok; im.src = p.url; });
+      el.style.backgroundImage = `url("${p.url}")`; el.classList.add('loaded'); el.classList.remove('nophoto');
       const cr = el.querySelector(':scope > .credit') || el.parentElement?.querySelector(':scope > .credit');
       const credit = `<a href="${esc(p.page)}" target="_blank">Foto: ${esc(p.artist || 'Wikimedia Commons')} · ${esc(p.license)}</a>`;
       if (cr) cr.innerHTML = credit;
@@ -70,6 +97,7 @@ async function setPhoto(el, queries, idx = 0) {
       return p;
     }
   }
+  el.classList.add('loaded', 'nophoto');
   return null;
 }
 // carga perezosa con concurrencia limitada
@@ -240,7 +268,7 @@ async function runSearch(useAi) {
   try {
     if (useAi) {
       const r = await api('/api/ai', filters());
-      $('#aiBox').innerHTML = `<b>${icon('spark').replace('<svg', '<svg width="14" height="14"')} ${r.ai ? 'Despachador IA · DeepSeek' : 'Clasificación automática'}</b>${esc(r.summary)}`;
+      $('#aiBox').innerHTML = `<b>${icon('spark').replace('<svg', '<svg width="14" height="14"')} ${r.ai ? 'Despachador IA · ' + esc(r.aiName || '') : 'Clasificación automática'}</b>${esc(r.summary)}`;
       $('#aiBox').classList.remove('hidden');
       const keys = new Set(r.picks.map(p => p.origin.icao + p.dest.icao));
       wiz.results = [...r.picks.map(p => ({ ...p, pick: true })), ...r.candidates.filter(c => !keys.has(c.origin.icao + c.dest.icao))];
@@ -291,7 +319,7 @@ async function renderAircraftStep() {
   $('#aircraftGrid').innerHTML = fams.map(f => `<div class="fam-h">${esc(f.name)}</div><div class="ac-grid">${f.items.map(a => `
     <div class="ac-card ${a.feasible ? '' : 'off'} ${wiz.aircraft?.code === a.code ? 'sel' : ''}" data-code="${a.code}">
       <div class="chkmark">${icon('check')}</div>
-      <div class="ph" data-q="${esc(a.photo)}"></div>
+      <div class="ph" data-type="${esc(a.code)}"></div>
       <div class="bd">
         <div class="mk">${esc(a.maker)} · ${esc(a.engines)}</div>
         <div class="nm">${esc(a.name)}<small>${esc(a.code)}</small></div>
@@ -299,7 +327,7 @@ async function renderAircraftStep() {
         <div class="ops">${!a.feasible ? '<span class="tag dim">Fuera de alcance</span>' : a.onRoute.length ? `<span class="tag ok">Opera esta ruta</span>${a.onRoute.slice(0, 4).map(i => `<span class="tag dim">${esc(i)}</span>`).join('')}` : `<span class="tag dim">${a.operators} aerolíneas</span>`}${a.oversized && a.feasible ? '<span class="tag dim">Largo radio</span>' : ''}</div>
       </div>
     </div>`).join('')}</div>`).join('');
-  $$('#aircraftGrid .ph').forEach(el => lazyPhoto(el, el.dataset.q));
+  $$('#aircraftGrid .ph').forEach(el => lazyPhoto(el, { type: el.dataset.type }));
   $$('#aircraftGrid .ac-card').forEach(el => el.onclick = () => {
     if (el.classList.contains('off')) return toast('Ese avión no tiene alcance para esta ruta', true);
     const a = list.find(x => x.code === el.dataset.code);
@@ -365,7 +393,7 @@ async function renderDispatchStep(forceAi) {
     <div class="field"><label>Nivel de crucero</label><input id="fFl" type="number" step="10" value="${d.cruiseFl}"></div>
     <div class="field"><label>Cost index</label><input id="fCi" type="number" value="${d.ci}"></div>
     <div class="field"><label>Pasajeros</label><input id="fPax" type="number" value="${d.pax}" max="${a.seats}"></div>`;
-  $('#briefing').innerHTML = d.briefing ? `<b>${icon('spark').replace('<svg', '<svg width="14" height="14"')} ${d.ai ? 'Briefing del despachador IA' : 'Aviso'}</b>${esc(d.briefing)}` : '';
+  $('#briefing').innerHTML = d.briefing ? `<b>${icon('spark').replace('<svg', '<svg width="14" height="14"')} ${d.ai ? 'Briefing del despachador IA · ' + esc(d.aiName || '') : 'Aviso'}</b>${esc(d.briefing)}` : '';
   const sync = () => {
     d.fltnum = $('#fFlt').value.replace(/\D/g, ''); d.callsign = d.airline + d.fltnum;
     const [h, m] = $('#fDep').value.split(':'); const t = new Date(d.depTime); t.setUTCHours(+h, +m, 0, 0); if (t < Date.now() - 3600e3) t.setUTCDate(t.getUTCDate() + 1); d.depTime = t.toISOString();
@@ -420,7 +448,7 @@ function stopPolling() { clearTimeout(pollTimer); pollTimer = null; }
 function renderSendStep() {
   const r = wiz.route, a = wiz.aircraft, al = wiz.airline, d = wiz.disp;
   const hero = $('#sendHero');
-  hero.innerHTML = `<div class="in"><div style="display:flex;gap:14px;align-items:center"><div class="logo-pill" style="background:#fff;border-radius:10px;padding:5px 10px;height:40px;display:flex;align-items:center">${logoImg(al)}</div><div><b style="font-size:22px">${esc(d.callsign)}</b><div class="muted">${esc(al.callsign || '')} ${esc(d.fltnum)} · ${esc(a.maker)} ${esc(a.name)}</div></div></div>
+  hero.innerHTML = `<div class="in"><div style="display:flex;gap:14px;align-items:center"><div class="logo-pill">${logoImg(al)}</div><div><b style="font-size:22px">${esc(d.callsign)}</b><div class="muted">${esc(al.callsign || '')} ${esc(d.fltnum)} · ${esc(a.maker)} ${esc(a.name)}</div></div></div>
     <div class="route-big"><div><b>${esc(r.origin.icao)}</b><span>${esc(r.origin.city)} · RWY ${esc(d.origRwy)}</span></div><div class="arrow">${icon('plane')}</div><div><b>${esc(r.dest.icao)}</b><span>${esc(r.dest.city)} · RWY ${esc(d.destRwy)}</span></div></div>
     <div class="muted" style="margin-top:10px">Salida ${zt(d.depTime)}Z · FL${d.cruiseFl} · CI ${d.ci} · ALTN ${esc(d.altn)} · ${d.pax} pax</div></div>`;
   hero.querySelector('.route-big .arrow').innerHTML = `<i data-icon="plane"></i>`; applyIcons(hero);
@@ -527,8 +555,8 @@ function renderHome() {
     $('#nextMeta').innerHTML = `<div><i data-icon="cal"></i><div><b>${fmtDate(nf.dep)}</b>${zt(nf.dep)}Z</div></div><div><i data-icon="plane"></i><div><b>${esc(nf.type)}</b>${esc(nf.callsign)}</div></div>`;
     const mins = Math.round((Date.parse(nf.dep) - Date.now()) / 60e3);
     $('#nextWhen').textContent = mins > 0 ? `En ${hm(mins)}` : 'Ya salió';
-    setPhoto(nextBg, [{ q: `${nf.airlineName} ${nf.typeName}`, must: keyWord(nf.airlineName) }, { q: `${nf.airlineName} landing`, must: keyWord(nf.airlineName) }, nf.typeName + ' landing']);
-  } else setPhoto(nextBg, 'Airbus A320neo landing');
+    setPhoto(nextBg, [{ al: nf.airline, type: nf.type }, { type: nf.type }]);
+  } else setPhoto(nextBg, { type: 'A359' });
   applyIcons($('#nextCard'));
   // avión favorito
   const counts = {}; fl.forEach(f => counts[f.type] = (counts[f.type] || 0) + 1);
@@ -536,7 +564,7 @@ function renderHome() {
   const ac = state.aircraft.find(a => a.code === fav);
   if (ac) {
     $('#fleetName').textContent = `${ac.maker} ${ac.name}`;
-    setPhoto($('#fleetImg'), ac.photo);
+    setPhoto($('#fleetImg'), { type: ac.code });
     const fh = fl.filter(f => f.type === fav).reduce((s, f) => s + (+f.block || 0), 0) / 60;
     $('#fleetStats').innerHTML = `<div><b>${counts[fav] || 0}</b><span>Vuelos</span></div><div><b>${ac.operators}</b><span>Aerolíneas</span></div><div><b>${fh.toFixed(1)} h</b><span>Horas</span></div>`;
   }
@@ -581,7 +609,7 @@ async function launch(target) {
 }
 $('#btnLaunch').onclick = () => launch('bat');
 $('#btnVolanta').onclick = () => launch('volanta');
-const CFG = ['pilotName', 'simbriefUser', 'deepseekKey', 'deepseekModel', 'firebaseProjectId', 'firebaseApiKey', 'batPath', 'volantaPath', 'chartsDir', 'prepMin'];
+const CFG = ['pilotName', 'simbriefUser', 'aiProvider', 'geminiKey', 'geminiModel', 'deepseekKey', 'deepseekModel', 'firebaseProjectId', 'firebaseApiKey', 'batPath', 'volantaPath', 'chartsDir', 'prepMin'];
 function applyConfig(c) {
   state.config = c;
   CFG.forEach(k => { const el = $('#cfg-' + k); if (el) el.value = c[k] ?? ''; });

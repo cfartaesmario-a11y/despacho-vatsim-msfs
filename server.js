@@ -15,6 +15,9 @@ const UA = 'vatsim-dispatch-personal/2.0';
 const DEFAULT_CONFIG = {
   pilotName: '',
   simbriefUser: '',
+  aiProvider: 'gemini',
+  geminiKey: '',
+  geminiModel: 'gemini-3.5-flash',
   deepseekKey: '',
   deepseekModel: 'deepseek-chat',
   firebaseProjectId: '',
@@ -414,29 +417,160 @@ try { photoCache = JSON.parse(fs.readFileSync(PHOTO_CACHE_PATH, 'utf8')); } catc
 const BAD = /cockpit|cabin|interior|seat|engine|wing|tail|galley|lavator|toilet|model|mockup|mock-up|toy|logo|meal|crew|gate|nose|drawing|diagram|scale|lego|paper|museum|wreck|crash|accident|fire|map|chart|panel|screen|landing gear|undercarriage|winglet|sharklet|fan|turbine|nacelle|apu|uniform|lounge|ticket|boarding|terminal|interior|night|sign/i;
 const GOOD = /landing|take ?off|takeoff|departing|departure|approach|final|in flight|in-flight|climb|airborne|rotat|arriving|short final|flying/i;
 const fold = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-async function searchPhotos(q, must = '') {
-  const key = must ? q + '|' + must : q;
+let photoCats = {};
+try { photoCats = readJSON('photo-cats.json'); } catch {}
+// Commons limita la frecuencia: todas las consultas pasan por una cola (una a la vez, con pausa).
+// Las peticiones de la web van delante de la precarga en segundo plano; si Commons pide frenar,
+// toda la cola espera (enfriamiento) en vez de insistir.
+const commonsQueue = []; let commonsBusy = false, commonsCoolUntil = 0, lastUserPhoto = 0;
+const wait = ms => new Promise(ok => setTimeout(ok, ms));
+function commons(url, background = false) {
+  if (!background) lastUserPhoto = Date.now();
+  return new Promise((resolve, reject) => {
+    const job = { url, resolve, reject, bg: background };
+    const firstBg = commonsQueue.findIndex(j => j.bg);
+    if (background || firstBg < 0) commonsQueue.push(job); else commonsQueue.splice(firstBg, 0, job);
+    pumpCommons();
+  });
+}
+async function pumpCommons() {
+  if (commonsBusy) return; commonsBusy = true;
+  while (commonsQueue.length) {
+    const job = commonsQueue.shift();
+    let ok = false;
+    for (let t = 0; t < 3 && !ok; t++) {
+      if (Date.now() < commonsCoolUntil) await wait(commonsCoolUntil - Date.now());
+      try {
+        const r = await fetch(job.url, { headers: { 'User-Agent': 'DespachoVATSIM/2.0 (uso personal; herramienta local)' } });
+        const text = await r.text();
+        if (r.ok && text.startsWith('{')) { job.resolve(JSON.parse(text)); ok = true; }
+        else commonsCoolUntil = Date.now() + 20000 * (t + 1);
+      } catch { await wait(2000); }
+      await wait(700);
+    }
+    if (!ok) job.reject(new Error('Wikimedia Commons está limitando las peticiones, reintenta en un minuto'));
+  }
+  commonsBusy = false;
+}
+// q: texto o, con deepcat, una categoría de Commons (todas las fotos de dentro son del avión correcto)
+async function searchPhotos(q, must = '', { deepcat = false, bg = false } = {}) {
+  const key = 'v3|' + (deepcat ? 'cat:' : '') + q + (must ? '|' + must : '');
   if (photoCache[key]) return photoCache[key];
-  const url = 'https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search&gsrnamespace=6&gsrlimit=30'
-    + '&gsrsearch=' + encodeURIComponent(q + ' filetype:bitmap')
-    + '&prop=imageinfo&iiprop=url|size|extmetadata&iiurlwidth=1600&iiextmetadatafilter=Artist|LicenseShortName';
-  const j = await getJSON(url);
-  const words = q.toLowerCase().split(/\s+/).filter(w => w.length > 2 && !/landing|airbus|boeing/.test(w));
+  const search = deepcat ? `deepcat:"${q}"` : q + ' filetype:bitmap';
+  const url = 'https://commons.wikimedia.org/w/api.php?action=query&format=json&generator=search&gsrnamespace=6&gsrlimit=50'
+    + '&gsrsearch=' + encodeURIComponent(search)
+    + '&prop=imageinfo&iiprop=url|size|mime|extmetadata&iiurlwidth=1920&iiextmetadatafilter=Artist|LicenseShortName';
+  const j = await commons(url, bg);
+  const words = deepcat ? [] : q.toLowerCase().split(/\s+/).filter(w => w.length > 2 && !/landing|airbus|boeing/.test(w));
   const list = Object.values(j.query?.pages || {}).map(p => {
-    const i = p.imageinfo?.[0]; if (!i) return null;
+    const i = p.imageinfo?.[0]; if (!i || !/jpeg|png|webp/.test(i.mime || '')) return null;
     const t = p.title.replace(/^File:/, '');
-    if (BAD.test(t) || i.width < 1200 || i.width / i.height < 1.25 || i.width / i.height > 2.2) return null;
+    const ratio = i.width / i.height;
+    if (BAD.test(t) || i.width < 1600 || ratio < 1.3 || ratio > 2.1) return null;
     if (must && !fold(t).includes(fold(must))) return null;
-    let s = (GOOD.test(t) ? 3 : 0) + words.filter(w => t.toLowerCase().includes(w)).length + Math.min(i.width / 2000, 1.5);
-    const artist = (i.extmetadata?.Artist?.value || '').replace(/<[^>]+>/g, '').trim().slice(0, 60);
-    return { s, title: t, url: i.thumburl, page: i.descriptionurl, artist, license: i.extmetadata?.LicenseShortName?.value || '' };
+    const s = (GOOD.test(t) ? 3 : 0) + words.filter(w => t.toLowerCase().includes(w)).length
+      + Math.min(i.width / 2400, 2) + (ratio > 1.4 && ratio < 1.8 ? 0.5 : 0);
+    const artist = (i.extmetadata?.Artist?.value || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    return { s, title: t, url: i.thumburl, w: Math.min(i.width, 2048), page: i.descriptionurl, artist, license: i.extmetadata?.LicenseShortName?.value || '' };
   }).filter(Boolean).sort((a, b) => b.s - a.s).slice(0, 8).map(({ s, ...r }) => r);
   photoCache[key] = list;
   fs.writeFile(PHOTO_CACHE_PATH, JSON.stringify(photoCache), () => {});
   return list;
 }
+// Foto de un tipo en librea del fabricante (o la mejor genérica) y de un tipo con la librea de una aerolínea concreta.
+async function typePhotos(code, bg = false) {
+  const a = AIRCRAFT[code]; if (!a) return [];
+  const out = [];
+  for (const cat of a.house || []) { out.push(...await searchPhotos(cat, '', { deepcat: true, bg })); if (out.length >= 4) break; }
+  if (out.length < 2) out.push(...await searchPhotos(a.photo, '', { bg }));
+  return dedupe(out);
+}
+async function airlinePhotos(icao, code, bg = false) {
+  const al = fleetByIcao.get(icao), a = AIRCRAFT[code];
+  if (!al) return [];
+  const cat = photoCats[icao + '|' + code];
+  let out = cat ? await searchPhotos(cat, '', { deepcat: true, bg }) : [];
+  if (!out.length && a) out = await searchPhotos(`${al.name} ${a.maker} ${a.name}`, airlineWord(al.name), { bg });
+  if (!out.length) { // cualquier avión de esa aerolínea, de la misma familia
+    const sib = Object.keys(photoCats).find(k => k.startsWith(icao + '|') && AIRCRAFT[k.split('|')[1]]?.family === a?.family)
+      || Object.keys(photoCats).find(k => k.startsWith(icao + '|'));
+    if (sib) out = await searchPhotos(photoCats[sib], '', { deepcat: true, bg });
+  }
+  return out; // vacío = la web muestra una tarjeta con el logo, nunca otra aerolínea
+}
+// Logos PNG transparentes en alta resolución, servidos desde aquí (mismo origen: la web puede recortarlos con canvas)
+const LOGO_DIR = path.join(DATA, 'logos');
+async function logo(res, iata) {
+  const f = path.join(LOGO_DIR, iata + '.png');
+  if (!fs.existsSync(f)) {
+    const r = iata.length === 2 ? await fetch(`https://pics.avs.io/800/320/${iata}.png`, { headers: { 'User-Agent': UA } }) : null;
+    const buf = r?.ok ? Buffer.from(await r.arrayBuffer()) : null;
+    if (!buf || buf.length < 1500 || buf.readUInt32BE(0) !== 0x89504e47) { res.writeHead(404); return res.end(); }
+    fs.mkdirSync(LOGO_DIR, { recursive: true }); fs.writeFileSync(f, buf);
+  }
+  res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'max-age=604800' });
+  fs.createReadStream(f).pipe(res);
+}
+const dedupe = l => l.filter((x, i) => l.findIndex(y => y.url === x.url) === i);
+// Las fotos se sirven a 1920 px (tamaño estándar de Commons): nítidas en pantalla y la mitad de pesadas que 3840.
+function sized(list) {
+  return list.map(p => {
+    let url = p.url.split('?')[0];
+    if (url.includes('/thumb/')) url = url.replace(/\/\d+px-([^/]+)$/, '/1920px-$1').replace('//upload.wikimedia.org', '//thumb.wikimedia.org');
+    else if (p.w >= 1920) { const m = url.match(/^(.*\/commons)\/(\w\/\w\w)\/([^/]+)$/); if (m) url = `${m[1]}/thumb/${m[2]}/${m[3]}/1920px-${m[3]}`.replace("//upload.wikimedia.org", "//thumb.wikimedia.org"); }
+    return { ...p, url };
+  });
+}
+const airlineWord = n => n.split(/\s+/).filter(w => !/^(air|airlines|airways|lines|international|de|del)$/i.test(w)).sort((a, b) => b.length - a.length)[0] || n;
 
-// ================================================================ IA de despacho (DeepSeek)
+// ================================================================ IA de despacho (Gemini principal, DeepSeek de reserva)
+// Si el modelo está saturado (503/429/500) prueba otros modelos Flash antes de rendirse.
+const GEMINI_FALLBACK = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash'];
+async function gemini(system, user) {
+  const models = [...new Set([config.geminiModel || 'gemini-3.5-flash', ...GEMINI_FALLBACK])];
+  let last;
+  for (const m of models) {
+    try { return await geminiOnce(m, system, user); }
+    catch (e) { last = e; if (e.name === 'TimeoutError') { e.message = 'Gemini tardó demasiado'; e.retry = true; } if (!e.retry) throw e; console.error(`Gemini ${m}:`, e.message); }
+  }
+  throw last;
+}
+async function geminiOnce(modelName, system, user) {
+  const model = encodeURIComponent(modelName);
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': config.geminiKey }, signal: AbortSignal.timeout(20000),
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: 'user', parts: [{ text: user }] }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0.5 },
+    }),
+  });
+  if (!r.ok) {
+    const msg = { 401: 'clave de Gemini no válida', 403: 'la clave de Gemini no tiene permiso', 404: 'modelo de Gemini no disponible', 429: 'límite de uso de Gemini alcanzado', 503: 'Gemini saturado' }[r.status];
+    const err = new Error(msg || `Gemini ${r.status}`);
+    err.retry = [404, 429, 500, 503].includes(r.status);
+    throw err;
+  }
+  const j = await r.json();
+  const text = (j.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
+  return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ''));
+}
+let lastAi = '';
+async function askAI(system, user) {
+  const order = config.aiProvider === 'deepseek' ? ['deepseek', 'gemini'] : ['gemini', 'deepseek'];
+  const errors = [];
+  for (const p of order) {
+    if (!(p === 'gemini' ? config.geminiKey : config.deepseekKey)) continue;
+    try {
+      const out = await (p === 'gemini' ? gemini(system, user) : deepseek(system, user));
+      lastAi = p === 'gemini' ? 'Gemini' : 'DeepSeek';
+      return out;
+    } catch (e) { errors.push(e.message); console.error(`IA ${p}:`, e.message); }
+  }
+  if (errors.length) throw new Error(errors.join(' · '));
+  return null;
+}
 async function deepseek(system, user) {
   if (!config.deepseekKey) return null;
   const r = await fetch('https://api.deepseek.com/chat/completions', {
@@ -467,13 +601,13 @@ async function aiSuggest(opts) {
 Elige las 3 mejores rutas para volar ahora en MSFS 2024 con ATC real. Prioriza ATC en llegada abierto a la llegada (margen positivo), ATC en salida, cobertura en ruta, eventos, meteorología interesante pero volable y las preferencias del piloto.
 Responde SOLO JSON: {"resumen":"2 frases en español, tono profesional","elecciones":[{"id":n,"motivo":"1-2 frases concretas en español"}]}`;
   try {
-    const p = await deepseek(sys, `Preferencias: ${opts.preference || 'ninguna'}\nCandidatas: ${JSON.stringify(compact)}`);
+    const p = await askAI(sys, `Preferencias: ${opts.preference || 'ninguna'}\nCandidatas: ${JSON.stringify(compact)}`);
     if (p) {
       const picks = (p.elecciones || []).map(e => cands[e.id] && { ...cands[e.id], reason: e.motivo }).filter(Boolean);
-      return { picks, summary: p.resumen || '', candidates: cands, ai: true };
+      return { picks, summary: p.resumen || '', candidates: cands, ai: true, aiName: lastAi };
     }
   } catch (e) { console.error('IA:', e.message); var aiError = e.message; }
-  return { picks: cands.slice(0, 3).map(c => ({ ...c, reason: 'Mejor puntuación de cobertura ATC.' })), summary: aiError ? `IA no disponible (${aiError}). Clasificación automática por cobertura ATC.` : 'Clasificación automática por cobertura ATC (añade tu clave de DeepSeek en Ajustes).', candidates: cands, ai: false };
+  return { picks: cands.slice(0, 3).map(c => ({ ...c, reason: 'Mejor puntuación de cobertura ATC.' })), summary: aiError ? `IA no disponible (${aiError}). Clasificación automática por cobertura ATC.` : 'Clasificación automática por cobertura ATC (añade tu clave de Gemini en Ajustes).', candidates: cands, ai: false };
 }
 
 function alternatesFor(d, origin) {
@@ -524,7 +658,7 @@ Responde SOLO JSON: {"fltnum":"número","cruiseFl":número (ej 360),"ci":número
   });
   let ai = false;
   try {
-    const p = await deepseek(sys, user);
+    const p = await askAI(sys, user);
     if (p) {
       ai = true;
       const n = parseInt(p.fltnum, 10);
@@ -536,7 +670,7 @@ Responde SOLO JSON: {"fltnum":"número","cruiseFl":número (ej 360),"ci":número
       base.briefing = p.briefing || '';
     }
   } catch (e) { base.briefing = 'IA no disponible: ' + e.message; }
-  return { ...base, ai, nm, aircraft: ac, origin: pub(o), dest: pub(d), runwaysOrigin: rwO, runwaysDest: rwD, alternates: alts };
+  return { ...base, ai, aiName: ai ? lastAi : '', nm, aircraft: ac, origin: pub(o), dest: pub(d), runwaysOrigin: rwO, runwaysDest: rwD, alternates: alts };
 }
 
 // ================================================================ SimBrief
@@ -617,7 +751,7 @@ function serveFile(res, base, rel) {
     res.writeHead(200, { 'Content-Type': MIME[path.extname(f).toLowerCase()] || 'application/octet-stream' }); res.end(buf);
   });
 }
-const publicConfig = () => ({ ...config, deepseekKey: config.deepseekKey ? '••••' : '', firebaseApiKey: config.firebaseApiKey ? '••••' : '', storage: fbOn() ? 'firebase' : 'local' });
+const publicConfig = () => ({ ...config, geminiKey: config.geminiKey ? '••••' : '', deepseekKey: config.deepseekKey ? '••••' : '', firebaseApiKey: config.firebaseApiKey ? '••••' : '', storage: fbOn() ? 'firebase' : 'local' });
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`), p = url.pathname, q = k => url.searchParams.get(k) || '';
@@ -646,7 +780,10 @@ http.createServer(async (req, res) => {
     if (p === '/api/wizard/aircraft') return send(res, 200, wizardAircraft(q('o').toUpperCase(), q('d').toUpperCase()));
     if (p === '/api/wizard/airlines') return send(res, 200, wizardAirlines(q('o').toUpperCase(), q('d').toUpperCase(), q('type').toUpperCase()));
     if (p === '/api/dispatch' && req.method === 'POST') return send(res, 200, await dispatchProposal(await readBody(req)));
-    if (p === '/api/photos') return send(res, 200, await searchPhotos(q('q'), q('must')));
+    if (p === '/api/photos') return send(res, 200, sized(await searchPhotos(q('q'), q('must'))));
+    if (p === '/api/photo/type') return send(res, 200, sized(await typePhotos(q('type').toUpperCase())));
+    if (p === '/api/photo/airline') return send(res, 200, sized(await airlinePhotos(q('al').toUpperCase(), q('type').toUpperCase())));
+    if (p.startsWith('/api/logo/')) return logo(res, p.split('/').pop().toUpperCase().replace(/[^A-Z0-9]/g, ''));
     if (p === '/api/simbrief') {
       const user = q('user') || config.simbriefUser;
       if (!user) return send(res, 400, { error: 'Añade tu usuario de SimBrief en Ajustes' });
@@ -674,21 +811,13 @@ http.createServer(async (req, res) => {
   }
 }).listen(PORT, '127.0.0.1', () => { console.log(`Despacho listo en http://localhost:${PORT}`); setTimeout(warmPhotos, 4000); });
 
-// Precarga en segundo plano las fotos más usadas (familias A320 y A350 de aerolíneas europeas),
-// con las mismas consultas que hace la web, para que el asistente cargue al instante.
+// Precarga en segundo plano las fotos (tipos en librea del fabricante y familias A320/A350 de cada aerolínea)
+// para que el asistente cargue al instante. Todo pasa por la cola de Commons, sin saturarla.
 async function warmPhotos() {
-  const keyWord = n => n.split(/\s+/).filter(w => !/^(air|airlines|airways|lines|international|de|del)$/i.test(w)).sort((a, b) => b.length - a.length)[0] || n;
-  const jobs = aircraftList.map(a => [a.photo, '']);
   const focus = ['A20N', 'A21N', 'A320', 'A321', 'A319', 'A359', 'A35K'];
-  for (const f of fleets) for (const code of f.fleet.filter(c => focus.includes(c))) {
-    const a = AIRCRAFT[code]; if (!a) continue;
-    jobs.push([`${f.name} ${a.maker} ${a.name}`, keyWord(f.name)]);
-  }
   let n = 0;
-  for (const [q, must] of jobs) {
-    if (photoCache[must ? q + '|' + must : q]) continue;
-    try { await searchPhotos(q, must); n++; } catch {}
-    await new Promise(r => setTimeout(r, 400));
-  }
-  if (n) console.log(`Fotos precargadas: ${n}`);
+  const idle = async () => { while (Date.now() - lastUserPhoto < 15000) await wait(3000); await wait(1500); };
+  for (const a of aircraftList) { await idle(); try { await typePhotos(a.code, true); n++; } catch {} }
+  for (const f of fleets) for (const code of f.fleet.filter(c => focus.includes(c))) { await idle(); try { await airlinePhotos(f.icao, code, true); n++; } catch {} }
+  console.log(`Fotos listas: ${n}`);
 }

@@ -354,3 +354,76 @@ textarea { resize: none; }
   .stepper li { font-size: 0; justify-content: center; padding: 10px; } .stepper li span { font-size: 13px; }
   .welcome h1 { font-size: 30px; }
 }
+
+/* =====================================================================
+   v3 · pulido: fotos nítidas con fundido, logos transparentes, tarjetas más limpias
+   ===================================================================== */
+:root { --ease: cubic-bezier(.2,.7,.2,1); }
+body { letter-spacing: -.005em; }
+.card, .kpi, .stepper li { box-shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 10px 30px rgba(0,0,0,.18); }
+.card-h { letter-spacing: -.2px; }
+
+/* fotos: esqueleto animado mientras cargan y fundido al aparecer */
+.ph, .al-card, .disp-hero, .send-hero, .next-bg, .fleet-img { background-color: #0d1022; }
+.ph:not(.loaded), .al-card:not(.loaded), .fleet-img:not(.loaded) {
+  background-image: linear-gradient(100deg, rgba(255,255,255,0) 30%, rgba(255,255,255,.05) 50%, rgba(255,255,255,0) 70%) !important;
+  background-size: 200% 100% !important; animation: shimmer 1.4s linear infinite;
+}
+@keyframes shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+.ph.loaded, .al-card.loaded, .disp-hero.loaded, .send-hero.loaded, .next-bg.loaded, .fleet-img.loaded { animation: fadein .6s var(--ease); }
+@keyframes fadein { from { opacity: .35; filter: blur(6px); } to { opacity: 1; filter: none; } }
+.ph, .al-card, .disp-hero, .send-hero, .fleet-img { image-rendering: auto; background-size: cover; }
+
+/* logos transparentes: sin cajas blancas */
+img.al-logo { opacity: 0; transition: opacity .3s var(--ease); filter: drop-shadow(0 1px 6px rgba(0,0,0,.35)); }
+img.al-logo.ready { opacity: 1; }
+img.al-logo.mono { filter: brightness(0) invert(1) drop-shadow(0 1px 6px rgba(0,0,0,.35)); }
+.logo-pill, .disp-hero .lg, .tbl .lg { background: none !important; box-shadow: none !important; padding: 0 !important; border-radius: 0 !important; }
+.logo-pill .fb, .lg .fb { color: #fff !important; letter-spacing: 1px; }
+.tbl .lg { width: 54px; height: 22px; justify-content: flex-start; }
+.wiz-sum img { background: none; padding: 0; height: 18px; max-width: 70px; object-fit: contain; filter: drop-shadow(0 1px 4px rgba(0,0,0,.4)); }
+
+/* paso 2 · aviones en librea del fabricante */
+.ac-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+.ac-card { border-radius: 22px; background: linear-gradient(180deg, #141936, #0f1328); transition: transform .35s var(--ease), border-color .25s, box-shadow .35s var(--ease); }
+.ac-card:hover { transform: translateY(-4px); }
+.ac-card .ph { height: 210px; background-position: center 55%; }
+.ac-card .ph::after { background: linear-gradient(180deg, rgba(15,19,40,0) 50%, rgba(15,19,40,.85) 92%, #0f1328); }
+.ac-card .bd { padding: 2px 20px 18px; margin-top: -26px; position: relative; z-index: 1; }
+.ac-card .mk { text-transform: uppercase; letter-spacing: 1.4px; font-size: 11px; font-weight: 600; color: var(--accent2); }
+.ac-card .nm { font-size: 26px; font-weight: 750; letter-spacing: -.6px; margin: 2px 0 12px; }
+.ac-card .sp { border-top: 1px solid var(--line); padding-top: 12px; }
+.ac-card .ph .credit { opacity: 0; transition: opacity .2s; top: 10px; bottom: auto; left: 12px; right: auto; text-align: left; }
+.ac-card:hover .ph .credit { opacity: 1; }
+.ac-card .ph.nophoto::before { content: attr(data-type); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 46px; font-weight: 800; color: rgba(255,255,255,.08); letter-spacing: 4px; }
+
+/* paso 3 · aerolíneas: foto de SU avión + vidrio */
+.airline-grid { gap: 20px; }
+.al-card { height: 250px; border-radius: 26px; background-position: center 55%; transition: transform .35s var(--ease), box-shadow .35s var(--ease); }
+.al-card:hover { transform: translateY(-4px); }
+.al-card::after { opacity: .22; }
+.al-card .gl { background: rgba(12,14,30,.42); border-color: rgba(255,255,255,.2); padding: 14px 16px; border-radius: 20px; }
+.al-card .logo-pill { width: 104px; height: 40px; justify-content: flex-start; }
+.al-card .logo-pill img { max-height: 36px; max-width: 104px; object-fit: contain; }
+.al-card .tx b { font-size: 17px; letter-spacing: -.2px; }
+.al-card .credit { opacity: 0; transition: opacity .2s; }
+.al-card:hover .credit { opacity: 1; }
+.al-card.nophoto { background: radial-gradient(120% 120% at 100% 0%, color-mix(in srgb, var(--brand, #5b5ff0) 55%, #0d1022) 0%, #0d1022 70%) !important; }
+.al-card.nophoto::before { background: repeating-linear-gradient(135deg, rgba(255,255,255,.025) 0 2px, transparent 2px 14px); }
+
+/* despacho y envío */
+.disp-hero, .send-hero { background-position: center 55%; }
+.disp-hero .lg { height: 44px; }
+.disp-hero .lg img { max-height: 44px; max-width: 150px; object-fit: contain; }
+.send-hero .logo-pill { width: auto; height: 42px; display: flex; align-items: center; }
+.send-hero .logo-pill img { max-height: 42px; max-width: 150px; object-fit: contain; }
+.disp-hero .cs, .send-hero .in b { letter-spacing: .5px; }
+
+/* detalles */
+.btn { transition: filter .15s, background .15s, transform .15s var(--ease); }
+.btn:active:not(:disabled) { transform: scale(.98); }
+.stepper li { transition: background .25s, border-color .25s, color .25s; }
+.step.active { animation: stepin .35s var(--ease); }
+@keyframes stepin { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.credit { font-size: 10px; color: rgba(255,255,255,.6); text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

@@ -5,3 +5,4 @@ data/flights.json
 node_modules/
 .claude/
 *.log
+data/logos/
