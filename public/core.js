@@ -650,8 +650,26 @@ Responde SOLO JSON: {"fltnum":"número","cruiseFl":número (ej 360),"ci":número
   const fbOn = () => cfg().firebaseProjectId && cfg().firebaseApiKey;
   const fbUrl = () => `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(cfg().firebaseProjectId)}/databases/(default)/documents/flights?key=${encodeURIComponent(cfg().firebaseApiKey)}`;
   const toFs = o => ({ fields: Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => [k, typeof v === 'number' ? { doubleValue: v } : typeof v === 'boolean' ? { booleanValue: v } : { stringValue: String(v) }])) });
-  const fromFs = d => Object.fromEntries(Object.entries(d.fields || {}).map(([k, v]) => [k, v.stringValue ?? v.doubleValue ?? v.integerValue ?? v.booleanValue]));
+  const fromFs = d => ({ ...Object.fromEntries(Object.entries(d.fields || {}).map(([k, v]) => [k, v.stringValue ?? v.doubleValue ?? v.integerValue ?? v.booleanValue])), _doc: d.name });
   Core.firebaseOn = fbOn;
+  Core.firebaseDelete = async id => {
+    const f = (await Core.firebaseList()).find(x => (x.id || x.created) === id);
+    if (!f?._doc) throw new Error('Vuelo no encontrado en Firebase');
+    const r = await fetch(`https://firestore.googleapis.com/v1/${f._doc}?key=${encodeURIComponent(cfg().firebaseApiKey)}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error('Firebase: ' + (await r.text()).slice(0, 200));
+  };
+  Core.newFlightId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  // ATC en línea de un aeropuerto: posiciones con frecuencia, ATIS y el centro (CTR) que lo cubre
+  Core.atcAt = async function (icao) {
+    icao = String(icao).toUpperCase();
+    const vat = await Core.getVatsim(), a = airports.get(icao);
+    const s = vat.staffed.find(x => x.icao === icao);
+    const ORDER = ['DEL', 'GND', 'TWR', 'APP'];
+    const positions = s ? ORDER.filter(f => s.positions[f]).map(f => ({ facility: f, callsign: s.positions[f].callsign, freq: s.positions[f].freq, name: s.positions[f].name, close: s.positions[f].close })) : [];
+    const ctr = a ? Object.entries(vat.onlineFirs).filter(([id]) => pointInBoundary(a, id)).map(([, c]) => ({ facility: 'CTR', callsign: c.callsign, freq: c.freq, name: c.firName, close: c.close })) : [];
+    return { icao, positions: [...positions, ...ctr.filter((c, i, l) => l.findIndex(x => x.callsign === c.callsign) === i)], atis: s?.atis || [] };
+  };
   Core.firebaseList = async () => ((await getJSON(fbUrl() + '&pageSize=200')).documents || []).map(fromFs).sort((a, b) => String(b.created).localeCompare(String(a.created)));
   Core.firebaseSave = async flight => {
     const r = await fetch(fbUrl(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(toFs(flight)) });

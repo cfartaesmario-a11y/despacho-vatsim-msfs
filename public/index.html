@@ -7,8 +7,8 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<meta name="app-version" content="202611171229">
-<link rel="stylesheet" href="style.css?v=202611171229">
+<meta name="app-version" content="202611171426">
+<link rel="stylesheet" href="style.css?v=202611171426">
 </head>
 <body>
 <div class="app">
@@ -21,6 +21,7 @@
     <nav id="nav">
       <a data-view="home" class="active"><i data-icon="home"></i>Inicio</a>
       <a data-view="wizard"><i data-icon="plus"></i>Nuevo vuelo</a>
+      <a data-view="active"><i data-icon="flight"></i>Vuelos activos<span class="nav-badge" id="activeBadge"></span></a>
       <a data-view="atc"><i data-icon="radar"></i>ATC en vivo</a>
       <a data-view="history"><i data-icon="list"></i>Historial</a>
       <a data-view="settings"><i data-icon="gear"></i>Ajustes</a>
@@ -216,6 +217,38 @@
       </div>
     </section>
 
+    <!-- ============ VUELOS ACTIVOS -->
+    <section class="view" id="view-active">
+      <div class="step-head"><div><h2>Vuelos activos</h2><p>Abre un vuelo para seguirlo fase a fase. Clic derecho sobre un vuelo para eliminarlo.</p></div>
+        <button class="btn primary sm" data-goto="wizard"><i data-icon="plus"></i>Nuevo vuelo</button></div>
+      <div class="active-grid" id="activeList"></div>
+    </section>
+
+    <!-- ============ VUELO EN CURSO -->
+    <section class="view" id="view-flight">
+      <div class="fl-hero" id="flHero"></div>
+      <div class="fl-layout">
+        <aside class="card fl-phases"><div class="card-h"><span><i data-icon="list"></i>Etapas del vuelo</span></div><ol id="flPhases"></ol></aside>
+        <div class="card fl-check">
+          <div class="card-h"><span id="flPhaseName">—</span><span class="voice-state" id="voiceState"></span></div>
+          <p class="fl-tip" id="flTip"></p>
+          <div class="cl-title" id="clTitle"></div>
+          <ol class="cl-items" id="clItems"></ol>
+          <div class="cl-bar">
+            <button class="btn primary" id="btnVoice"><i data-icon="mic"></i>Leer checklist por voz</button>
+            <button class="btn" id="btnAllChecked">Marcar todo</button>
+            <button class="btn" id="btnNextPhase">Siguiente etapa <i data-icon="arrow"></i></button>
+          </div>
+          <div class="voice-opts"><label>Voz</label><select id="voiceSel"></select><label class="chk"><input type="checkbox" id="autoNext" checked><span>Pasar de etapa sola al completar</span></label></div>
+        </div>
+        <aside class="fl-side">
+          <div class="card"><div class="card-h"><span><i data-icon="radar"></i>Frecuencias</span><div class="seg mini" id="sideTabs"><button data-side="dep">Salida</button><button data-side="arr">Llegada</button></div></div><div id="sideFreq" class="pad"></div></div>
+          <div class="card"><div class="card-h"><span><i data-icon="doc"></i>ATIS y METAR</span></div><div id="sideAtis" class="pad"></div></div>
+          <div class="card"><div class="card-h"><span><i data-icon="pin"></i>Cartas</span></div><div id="sideCharts" class="pad"></div></div>
+        </aside>
+      </div>
+    </section>
+
     <!-- ============ HISTORIAL -->
     <section class="view" id="view-history">
       <div class="step-head"><div><h2>Historial de vuelos</h2><p id="histSub"></p></div></div>
@@ -255,9 +288,12 @@
   </div>
 </div>
 <div id="toast"></div>
+<div class="ctx-menu" id="ctxMenu"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="core.js?v=202611171229"></script>
-<script src="web-api.js?v=202611171229"></script>
-<script src="app.js?v=202611171229"></script>
+<script src="core.js?v=202611171426"></script>
+<script src="web-api.js?v=202611171426"></script>
+<script src="checklists.js?v=202611171426"></script>
+<script src="app.js?v=202611171426"></script>
+<script src="flight.js?v=202611171426"></script>
 </body>
 </html>

@@ -61,8 +61,13 @@ async function listFlights() {
   if (Core.firebaseOn()) return Core.firebaseList();
   try { return JSON.parse(fs.readFileSync(LOCAL_FLIGHTS, 'utf8')); } catch { return []; }
 }
+async function deleteFlight(id) {
+  if (Core.firebaseOn()) return Core.firebaseDelete(id);
+  const all = await listFlights();
+  fs.writeFileSync(LOCAL_FLIGHTS, JSON.stringify(all.filter(f => (f.id || f.created) !== id), null, 2));
+}
 async function saveFlight(f) {
-  const flight = { ...f, created: new Date().toISOString() };
+  const flight = { ...f, id: Core.newFlightId(), created: new Date().toISOString() };
   if (Core.firebaseOn()) { await Core.firebaseSave(flight); return { ...flight, storage: 'firebase' }; }
   const all = await listFlights(); all.unshift(flight);
   fs.writeFileSync(LOCAL_FLIGHTS, JSON.stringify(all.slice(0, 500), null, 2));
@@ -145,6 +150,8 @@ http.createServer(async (req, res) => {
       if (!user) return send(res, 400, { error: 'Añade tu usuario de SimBrief en Ajustes' });
       return send(res, 200, await Core.getSimbrief(user));
     }
+    if (p.startsWith('/api/atc/')) return send(res, 200, await Core.atcAt(p.split('/').pop()));
+    if (p === '/api/flights/delete' && req.method === 'POST') { await deleteFlight((await readBody(req)).id); return send(res, 200, { ok: true }); }
     if (p === '/api/flights') return send(res, 200, req.method === 'POST' ? await saveFlight(await readBody(req)) : await listFlights());
     if (p === '/api/launch' && req.method === 'POST') return send(res, 200, { ok: true, launched: launch((await readBody(req)).target) });
     if (p === '/api/config') {

@@ -65,6 +65,10 @@ const ICONS = {
   doc: '<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M8 13h8M8 17h6"/>',
   check: '<path d="m5 12 5 5L20 7"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  flight: '<path d="M2 16h20M6 16l3-9h2l-1 9M14 16l2-5h2l-1 5"/><circle cx="12" cy="20" r="1"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/>',
+  trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
   chev: '<path d="m9 6 6 6-6 6"/>',
   arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   back: '<path d="M19 12H5M11 6l-6 6 6 6"/>',
@@ -116,12 +120,13 @@ function lazyPhoto(el, queries) { el._load = () => setPhoto(el, queries); io.obs
 // ---------------------------------------------------------------- navegación
 const state = { vatsim: null, boundaries: null, config: {}, flights: [], aircraft: [] };
 function showView(v) {
-  $$('#nav a').forEach(a => a.classList.toggle('active', a.dataset.view === v));
+  $$('#nav a').forEach(a => a.classList.toggle('active', a.dataset.view === (v === 'flight' ? 'active' : v)));
   $$('.view').forEach(s => s.classList.toggle('active', s.id === 'view-' + v));
   if (v === 'atc') setTimeout(() => maps.atc.map.invalidateSize(), 50);
   if (v === 'home') { setTimeout(() => maps.home.map.invalidateSize(), 50); renderHome(); }
   if (v === 'wizard') { setTimeout(() => maps.wiz.map.invalidateSize(), 50); if (!$('#wizHeroImg').classList.contains('loaded')) setPhoto($('#wizHeroImg'), { type: 'A388' }, 1); }
   if (v === 'history') renderHistory();
+  if (v === 'active') window.renderActive?.();
 }
 $$('#nav a').forEach(a => a.onclick = () => showView(a.dataset.view));
 $$('[data-goto]').forEach(a => a.onclick = () => showView(a.dataset.goto));
@@ -534,8 +539,8 @@ function renderTimeline() {
       ${!o && wiz.sentAt ? '<br><button class="btn sm" id="sbCheck">Ya lo he generado · comprobar</button>' : ''}</div></li>
     <li class="${st(3)}"><div class="n">3</div><div class="c"><b>Presentar el plan en VATSIM</b><span>Inicia sesión con tu cuenta de VATSIM (tu CID) y pulsa «File Flight Plan». Los controladores lo verán al conectarte con vPilot con el mismo indicativo.</span>
       ${o?.prefileVatsim ? `<br><a class="btn primary" target="_blank" href="${esc(o.prefileVatsim)}">Presentar en VATSIM</a>` : ''}</div></li>
-    <li class="${st(4)}"><div class="n">4</div><div class="c"><b>Guardado en el historial</b><span>${wiz.saved ? `Guardado en ${esc(wiz.saved)}` : o ? 'Guardando…' : 'Se guarda al recibir el OFP'}</span>${!o && !wiz.saved ? '<br><button class="btn sm" id="btnSaveNoOfp">Guardar sin OFP</button>' : ''}</div></li>
-    <li class="local-only"><div class="n">5</div><div class="c"><b>Iniciar sesión de vuelo</b><span>Abre MSFS 2024, vPilot, Volanta y el resto de programas con tu .bat.</span><br><button class="btn" id="btnLaunch2">${play} Ejecutar iniciar_vuelo.bat</button></div></li>`;
+    <li class="${st(4)}"><div class="n">4</div><div class="c"><b>Guardado en el historial</b><span>${wiz.saved ? `Guardado en ${esc(wiz.saved)}` : o ? 'Guardando…' : 'Se guarda al recibir el OFP'}</span>${!o && !wiz.saved ? '<br><button class="btn sm" id="btnSaveNoOfp">Guardar sin OFP</button>' : ''}${wiz.savedId ? '<br><button class="btn primary sm" id="btnGoActive">Ir al vuelo activo →</button>' : ''}</div></li>
+    <li><div class="n">5</div><div class="c"><b>Iniciar sesión de vuelo</b><span>Abre MSFS 2024, vPilot, Volanta y el resto de programas con tu .bat.</span><br><button class="btn" id="btnLaunch2">${play} Ejecutar iniciar_vuelo.bat</button></div></li>`;
   $('#sbUserSave').onclick = async () => {
     const v = $('#sbUser').value.trim(); if (!v) return toast('Escribe tu usuario de SimBrief', true);
     applyConfig(await api('/api/config', { simbriefUser: v }));
@@ -551,6 +556,7 @@ function renderTimeline() {
   const ck = $('#sbCheck'); if (ck) ck.onclick = () => startPolling(true);
   $('#btnLaunch2').onclick = () => launch('bat');
   const sv = $('#btnSaveNoOfp'); if (sv) sv.onclick = () => saveFlight();
+  const ga = $('#btnGoActive'); if (ga) ga.onclick = () => { stopPolling(); window.openFlight(wiz.savedId); };
   renderOfp();
 }
 let sbWin = null;
@@ -611,8 +617,10 @@ async function saveFlight() {
       callsign: d.callsign, airline: al.icao, iata: al.iata || '', airlineName: al.name, rtf: al.callsign || '',
       origin: r.origin.icao, dest: r.dest.icao, originCity: r.origin.city, destCity: r.dest.city,
       type: a.code, typeName: `${a.maker} ${a.name}`, dep: d.depTime, block: o?.blockMin || r.block, fl: d.cruiseFl,
-      origRwy: d.origRwy, destRwy: d.destRwy, altn: d.altn, route: o?.route || '', reg: o?.reg || '', status: 'planificado',
+      origRwy: o?.originRwy || d.origRwy, destRwy: o?.destRwy || d.destRwy, altn: o?.altn || d.altn, route: o?.route || '', reg: o?.reg || '', status: 'planificado',
+      fuel: o?.fuelRamp ? `${o.fuelRamp} ${(o.units || 'kg').toUpperCase()}` : '', sid: o?.sid || '', star: o?.star || '', rtf: al.callsign || '',
     });
+    wiz.savedId = f.id;
     wiz.saved = f.storage === 'firebase' ? 'Firebase' : f.storage === 'navegador' ? 'este navegador' : 'local (data/flights.json)';
     await loadFlights(); renderTimeline();
   } catch (e) { toast('No se pudo guardar: ' + e.message, true); }
@@ -621,7 +629,7 @@ async function saveFlight() {
 // =====================================================================
 // INICIO, HISTORIAL, ATC
 // =====================================================================
-async function loadFlights() { try { state.flights = await api('/api/flights'); } catch { state.flights = []; } }
+async function loadFlights() { try { state.flights = await api('/api/flights'); } catch { state.flights = []; } window.updateActiveBadge?.(); }
 function weekCounts(n = 8) {
   const now = Date.now(), w = Array(n).fill(0), h = Array(n).fill(0);
   for (const f of state.flights) { const i = n - 1 - Math.floor((now - Date.parse(f.created)) / (7 * 864e5)); if (i >= 0 && i < n) { w[i]++; h[i] += (+f.block || 0) / 60; } }
@@ -708,6 +716,11 @@ api('/api/events').then(evs => {
 // AJUSTES Y LANZADOR
 // =====================================================================
 async function launch(target) {
+  if (window.WEB_MODE) {
+    location.href = `despacho-vuelo://${target === 'volanta' ? 'volanta' : 'iniciar'}/`;
+    toast('Si no se abre nada: doble clic una vez en Documentos\\DespachoVATSIM\\instalar_boton_web.reg');
+    return;
+  }
   try { const r = await api('/api/launch', { target }); toast('Ejecutando ' + r.launched.split('\\').pop()); } catch (e) { toast(e.message, true); }
 }
 $('#btnLaunch').onclick = () => launch('bat');
