@@ -175,12 +175,73 @@ function drawVatsim(m) {
     const lines = ORDER.filter(f => pos[f]).map(f => `<div class="pos"><span><b class="b ${f}">${LETTER[f]}</b> ${esc(pos[f].callsign)}</span><span class="f">${esc(pos[f].freq)}</span><span class="t">→ ${zt(pos[f].close.at)}Z</span></div>`).join('')
       + s.atis.map(a => `<div class="pos"><span><b class="b ATIS">${esc(a.code || 'I')}</b> ATIS</span><span class="f">${esc(a.freq)}</span><span></span></div>`).join('');
     const mk = L.marker([s.lat, s.lon], { icon }).addTo(layers.airports);
-    if (m === maps.wiz) mk.bindPopup(`<div class="ph">${esc(s.icao)}</div><div class="pn">${esc(s.name)}</div>${lines}<div class="popbtns"><button class="btn" onclick="setField('origin','${s.icao}')">Origen</button><button class="btn" onclick="setField('dest','${s.icao}')">Destino</button></div>`);
+    if (m === maps.wiz) hoverCard(mk, s.icao);
     else if (m === maps.atc) mk.bindPopup(`<div class="ph">${esc(s.icao)}</div><div class="pn">${esc(s.name)}</div>${lines}`);
   }
   if (m === maps.atc) for (const p of v.pilots) L.circleMarker([p.lat, p.lon], { radius: 2.2, color: '#fbbf24', weight: 0, fillOpacity: .8 }).bindTooltip(`<b>${esc(p.cs)}</b> ${esc(p.ac)} · ${esc(p.dep)}→${esc(p.arr)} · FL${Math.round(p.alt / 100)}`).addTo(layers.pilots);
 }
-window.setField = (id, icao) => { $('#' + id).value = icao; maps.wiz.map.closePopup(); toast(`${icao} como ${id === 'origin' ? 'origen' : 'destino'}`); };
+// ---------------------------------------------------------------- aeropuertos comerciales + ficha al pasar el ratón
+// Todos los aeropuertos con vuelos regulares (≈2.000, 565 en Europa). Tamaño según nº de destinos.
+const infoMem = new Map();
+const airportInfo = icao => { if (!infoMem.has(icao)) infoMem.set(icao, api('/api/airportinfo/' + icao).catch(() => null)); return infoMem.get(icao); };
+let cardTimer, cardIcao = null;
+function cardHtml(a) {
+  const longest = a.runways[0];
+  return `<div class="apcard">
+    <div class="h"><div><b>${esc(a.icao)}</b>${a.iata ? `<span>${esc(a.iata)}</span>` : ''}</div><small>${esc(a.city || '')}${a.country ? ' · ' + esc(a.country) : ''}</small></div>
+    <div class="nm">${esc(a.name)}</div>
+    <div class="st"><div><b>${a.routes}</b>destinos</div><div><b>${a.runways.length || '—'}</b>pistas</div><div><b>${longest ? longest.m.toLocaleString('es-ES') + ' m' : '—'}</b>pista mayor</div><div><b>${(+a.elev || 0).toLocaleString('es-ES')} ft</b>elevación</div></div>
+    ${a.runways.length ? `<div class="sec">Pistas</div><div class="chips">${a.runways.slice(0, 4).map(r => `<span>${esc(r.name)} <i>${r.m.toLocaleString('es-ES')} m</i></span>`).join('')}</div>` : ''}
+    ${a.topAirlines.length ? `<div class="sec">Aerolíneas principales</div><div class="als">${a.topAirlines.slice(0, 5).map(x => `<span title="${esc(x.name)} · ${x.routes} destinos"><img src="${logoUrl(x.iata)}" crossorigin="anonymous" onload="prepLogo(this)" onerror="this.replaceWith(document.createTextNode('${esc(x.iata)}'))" alt="${esc(x.name)}"></span>`).join('')}</div>` : ''}
+    ${a.topDest.length ? `<div class="sec">Destinos más servidos</div><div class="chips">${a.topDest.slice(0, 5).map(d => `<span>${esc(d.city)} <i>${esc(d.icao)}</i></span>`).join('')}</div>` : ''}
+    <div class="btns"><button class="btn primary" onclick="setField('origin','${a.icao}')">Origen</button><button class="btn" onclick="setField('dest','${a.icao}')">Destino</button></div>
+  </div>`;
+}
+// La ficha es una tarjeta flotante encima del mapa (no un popup de Leaflet) para que nunca quede tapada por el panel.
+const cardEl = Object.assign(document.createElement('div'), { className: 'apcard-float glass' });
+document.querySelector('#mapWizard').parentElement.appendChild(cardEl);
+cardEl.addEventListener('mouseenter', () => clearTimeout(cardTimer));
+cardEl.addEventListener('mouseleave', () => closeCardSoon());
+let cardLatLng = null;
+function placeCard() {
+  if (!cardLatLng || !cardEl.classList.contains('on')) return;
+  const stage = cardEl.parentElement, pt = maps.wiz.map.latLngToContainerPoint(cardLatLng);
+  const W = cardEl.offsetWidth, H = cardEl.offsetHeight, SW = stage.clientWidth, SH = stage.clientHeight;
+  const panel = stage.querySelector('.panel-left'), minX = panel && innerWidth > 860 ? panel.offsetLeft + panel.offsetWidth + 10 : 10;
+  let x = pt.x + 16; if (x + W > SW - 10) x = pt.x - W - 16; x = Math.max(minX, Math.min(x, SW - W - 10));
+  let y = pt.y - H / 2; y = Math.max(10, Math.min(y, SH - H - 10));
+  cardEl.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+}
+maps.wiz.map.on('move zoom', placeCard);
+function openCard(latlng, icao) {
+  clearTimeout(cardTimer); cardIcao = icao; cardLatLng = latlng;
+  cardEl.innerHTML = `<div class="apcard"><div class="h"><div><b>${esc(icao)}</b></div></div><div class="muted small"><span class="spin"></span>Cargando…</div></div>`;
+  cardEl.classList.add('on'); placeCard();
+  airportInfo(icao).then(a => { if (a && cardIcao === icao) { cardEl.innerHTML = cardHtml(a); placeCard(); } });
+}
+function closeCardSoon() { clearTimeout(cardTimer); cardTimer = setTimeout(() => { cardEl.classList.remove('on'); cardIcao = null; }, 350); }
+maps.wiz.map.on('click', () => { cardEl.classList.remove('on'); cardIcao = null; });
+function hoverCard(layer, icao) {
+  layer.on('mouseover', e => { clearTimeout(cardTimer); cardTimer = setTimeout(() => openCard(layer.getLatLng ? layer.getLatLng() : e.latlng, icao), 120); });
+  layer.on('mouseout', closeCardSoon);
+  layer.on('click', () => openCard(layer.getLatLng(), icao)); // en móvil/táctil, con un toque
+}
+async function drawCommercial() {
+  const m = maps.wiz, list = await api('/api/commercial');
+  const dots = L.layerGroup(), labels = L.layerGroup();
+  for (const [icao, iata, name, city, country, lat, lon, n] of list) {
+    const big = n >= 120, mid = n >= 40;
+    const c = L.circleMarker([lat, lon], { radius: big ? 5 : mid ? 3.6 : 2.4, color: '#c9cbff', weight: big ? 1.4 : 1, opacity: .9, fillColor: big ? '#8487ff' : '#5b5ff0', fillOpacity: big ? .9 : .65 }).addTo(dots);
+    hoverCard(c, icao);
+    if (n >= 25) L.marker([lat, lon], { icon: L.divIcon({ className: '', html: `<div class="aplbl ${big ? 'big' : ''}" data-n="${n}">${esc(iata || icao)}</div>`, iconSize: [0, 0] }), interactive: false }).addTo(labels);
+  }
+  dots.addTo(m.map); m.layers.airports.bringToFront?.();
+  // etiquetas: solo los grandes al alejar, todos al acercar
+  const upd = () => { const z = m.map.getZoom(); m.map.getContainer().dataset.z = z >= 7 ? 'all' : z >= 5 ? 'mid' : z >= 4 ? 'big' : 'none'; };
+  labels.addTo(m.map); m.map.on('zoomend', upd); upd();
+}
+drawCommercial().catch(() => {});
+window.setField = (id, icao) => { $('#' + id).value = icao; maps.wiz.map.closePopup(); cardEl.classList.remove('on'); toast(`${icao} como ${id === 'origin' ? 'origen' : 'destino'}`); };
 $('#showPilots').onchange = e => e.target.checked ? maps.atc.layers.pilots.addTo(maps.atc.map) : maps.atc.map.removeLayer(maps.atc.layers.pilots);
 
 fetch('data/bounds.json').then(r => r.json()).then(g => { state.boundaries = g; Object.values(maps).forEach(drawVatsim); });
@@ -495,12 +556,15 @@ async function checkOfp(manual) {
   if (!wiz.route || wiz.ofp) return true;
   try {
     const o = await api('/api/simbrief');
-    const fresh = o.generated && Date.parse(o.generated) >= wiz.sentAt - 30 * 60e3;
-    if (fresh && o.origin === wiz.route.origin.icao && o.dest === wiz.route.dest.icao) {
+    const t = o.generated ? Date.parse(o.generated) : 0;
+    const sameRoute = o.origin === wiz.route.origin.icao && o.dest === wiz.route.dest.icao;
+    // vale: misma ruta generada hasta 30 min antes, o cualquier plan generado después de abrir SimBrief
+    // (si cambiaste la ruta dentro de SimBrief, manda lo que generaste)
+    if (t && ((sameRoute && t >= wiz.sentAt - 30 * 60e3) || t >= wiz.sentAt - 60e3)) {
       wiz.ofp = o; stopPolling();
       try { if (sbWin && !sbWin.closed) sbWin.close(); } catch {}
       window.focus(); showView('wizard'); if (wiz.step !== 5) goStep(5);
-      toast(`OFP ${o.callsign || ''} recibido de SimBrief · cerrado SimBrief`);
+      toast(`OFP ${o.callsign || ''} ${o.origin}→${o.dest} recibido de SimBrief${sameRoute ? '' : ' (ruta distinta a la del asistente)'}`, !sameRoute);
       renderTimeline(); saveFlight(); return true;
     }
     if (manual) toast(o.generated ? `Tu último plan en SimBrief es ${o.origin}→${o.dest} (${zt(o.generated)}Z), no ${wiz.route.origin.icao}→${wiz.route.dest.icao}. Pulsa «Generate Flight».` : 'SimBrief aún no tiene ningún plan generado.', true);

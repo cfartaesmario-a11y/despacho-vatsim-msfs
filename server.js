@@ -124,6 +124,8 @@ http.createServer(async (req, res) => {
     if (p === '/api/events') return send(res, 200, await Core.getEvents());
     if (p === '/api/metar') return send(res, 200, await Core.getMetar(q('ids').split(',')));
     if (p === '/api/airports') return send(res, 200, Core.searchAirports(q('q')));
+    if (p === '/api/commercial') return send(res, 200, Core.commercialAirports());
+    if (p.startsWith('/api/airportinfo/')) return send(res, 200, Core.airportInfo(p.split('/').pop()));
     if (p.startsWith('/api/airport/')) {
       const a = Core.airport(p.split('/').pop());
       return a ? send(res, 200, { ...a, charts: listCharts(a.icao) }) : send(res, 404, { error: 'Aeropuerto desconocido' });
